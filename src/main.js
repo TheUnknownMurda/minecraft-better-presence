@@ -9,6 +9,7 @@ import { setLanguage } from './names.js';
 import { createTracer } from './trace.js';
 import { findLevel } from './level.js';
 import { readHunger } from './hunger.js';
+import { isPaused, patchScore } from './pause.js';
 import { ScreenReader } from './screen.js';
 
 const PORT = Number(process.env.PORT ?? 19131);
@@ -118,39 +119,54 @@ discord.on('sent', (a) => {
   if (a) log(`\x1b[36m->\x1b[0m ${a.details}  \x1b[90m|\x1b[0m ${a.state}`);
 });
 
-// Faim : lue a l'ecran (voir hunger.js), seulement quand Minecraft est au
-// premier plan ; sinon on garde la derniere valeur. Necessite `npm run calibrate`.
+// Lecture de l'ecran (faim et menu pause), seulement quand Minecraft est au
+// premier plan ; sinon on garde les dernieres valeurs. Necessite hud.json
+// (`npm run calibrate`, puis `npm run calibrate-pause`).
 const hud = loadHud();
 let screen = null;
-let hungerBusy = false;
-let hungerWarned = null;
+let screenBusy = false;
+let screenWarned = null;
 
 function loadHud() {
   try {
-    return JSON.parse(readFileSync(new URL('../hud.json', import.meta.url), 'utf8'));
+    const h = JSON.parse(readFileSync(new URL('../hud.json', import.meta.url), 'utf8'));
+    if (!h.pause) log('Pause : pas de calibration, lance `npm run calibrate-pause` pour l\'afficher');
+    return h;
   } catch {
-    log('Faim : pas de calibration, lance `npm run calibrate` pour l\'afficher');
+    log('Faim et pause : pas de calibration, lance `npm run calibrate` pour les afficher');
     return null;
   }
 }
 
-function warnHungerOnce(reason) {
-  if (hungerWarned === reason) return;
-  hungerWarned = reason;
-  log(`Faim : ${reason}`);
+function warnScreenOnce(reason) {
+  if (screenWarned === reason) return;
+  screenWarned = reason;
+  log(`Ecran : ${reason}`);
 }
 
-async function pollHunger() {
-  if (!hud || !bridge.connected || hungerBusy || state.inMenu) return;
-  hungerBusy = true;
+async function pollScreen() {
+  if (!hud || !bridge.connected || screenBusy || state.inMenu) return;
+  screenBusy = true;
   try {
     if (!screen?.alive) screen = new ScreenReader().start();
     const win = await screen.window();
     if (!win.found || !win.fg || win.minimized) return;
     if (win.w !== hud.window.w || win.h !== hud.window.h) {
-      warnHungerOnce(`fenetre en ${win.w}x${win.h} au lieu de ${hud.window.w}x${hud.window.h}, relance \`npm run calibrate\``);
+      warnScreenOnce(`fenetre en ${win.w}x${win.h} au lieu de ${hud.window.w}x${hud.window.h}, relance \`npm run calibrate\``);
       return;
     }
+
+    if (hud.pause) {
+      const scores = [];
+      for (const p of hud.pause.patches) {
+        scores.push(patchScore(await screen.grab(win.x + p.x, win.y + p.y, p.w, p.h), p));
+      }
+      const paused = isPaused(scores) && !state.inMenu;
+      if (paused !== state.paused) log(paused ? 'Menu pause' : 'Reprise du jeu');
+      state.paused = paused;
+      if (paused) return; // la barre de faim est masquee par le menu
+    }
+
     const g = hud.hunger;
     // Marge d'une case au-dessus et en dessous pour le tremblement des icones.
     const img = await screen.grab(win.x + g.x, win.y + g.y - g.cell, 9 * g.period + 9 * g.cell, 11 * g.cell);
@@ -158,15 +174,15 @@ async function pollHunger() {
     // Le joueur a pu quitter le monde pendant la capture.
     if (points !== null && !state.inMenu) state.hunger = points;
   } catch (e) {
-    warnHungerOnce(`capture impossible (${e.message})`);
+    warnScreenOnce(`capture impossible (${e.message})`);
   } finally {
-    hungerBusy = false;
+    screenBusy = false;
   }
 }
 
 // 5 s : c'est aussi ce qui detecte le retour au menu principal.
 setInterval(pollFast, 5_000);
-setInterval(pollHunger, 5_000);
+setInterval(pollScreen, 3_000);
 setInterval(pollSlow, trace ? 2_000 : 30_000);
 
 // Recalcul frequent ; le sink ne pousse vers Discord que ce qui a change.

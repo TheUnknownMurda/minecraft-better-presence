@@ -30,6 +30,7 @@ export class GameState {
   reset() {
     this.sessionStart = Date.now();
     this.inMenu = false; // menu principal : connexion ouverte, aucun monde charge
+    this.paused = false; // menu pause, reconnu a l'ecran (voir pause.js)
     // lastMoveAt a maintenant : pas de faux "En pause" juste apres la connexion.
     this.player = { name: null, dimension: null, pos: null, travel: null, underwater: false, lastMoveAt: Date.now() };
     this.world = { day: null, timeOfDay: null, weather: null };
@@ -58,6 +59,7 @@ export class GameState {
   enterMenu() {
     if (this.inMenu) return false;
     this.inMenu = true;
+    this.paused = false;
     Object.assign(this.player, { dimension: null, pos: null, travel: null, underwater: false });
     this.world = { day: null, timeOfDay: null, weather: null };
     this.players = { count: null, max: null };
@@ -210,6 +212,7 @@ export class GameState {
   /** Deduit l'activite courante, par ordre de priorite. */
   activity(now = Date.now()) {
     if (this.inMenu) return { kind: 'menu' };
+    if (this.paused) return { kind: 'paused' };
     this.recent = this.recent.filter((a) => now - a.at < WINDOW_MS);
 
     if (this.lastDeath && now - this.lastDeath.at < 15_000) {

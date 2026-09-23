@@ -16,6 +16,7 @@ const IMAGES = {
   riding: `${WIKI}Oak_Boat_JE4_BE2.png`,
   swimming: `${WIKI}Water_Bucket_JE2_BE2.png`,
   idle: `${WIKI}Red_Bed_JE4_BE2_%28facing_NWU%29.png`,
+  paused: `${WIKI}Clock_JE2_BE2.png`,
   dead: `${WIKI}Heart_0_%28icon%29.png`,
   exploring: `${WIKI}Compass_JE2_BE2.png`,
 };
@@ -37,6 +38,7 @@ function describe(a, dim) {
     case 'riding':    return t.riding(dim.in);
     case 'swimming':  return t.swimming();
     case 'idle':      return t.idle();
+    case 'paused':    return t.paused();
     default:          return t.exploring(dim.in);
   }
 }

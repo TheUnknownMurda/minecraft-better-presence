@@ -88,6 +88,21 @@ n'est simplement pas affichée.
 Une lecture douteuse n'est jamais affichée : contour non reconnu, ou couleurs
 inattendues (menu pause, inventaire, effet de faim qui verdit les cuisses).
 La valeur précédente est alors conservée.
+
+### Menu pause : reconnu à l'écran
+
+Le jeu ne signale pas la pause, et en multijoueur rien ne se fige. La presence
+reconnaît donc le menu lui-même, et affiche **« ⏸️ Game Paused »**. Une
+calibration apprend sa signature, **après** celle de la faim : lance
+`npm run calibrate-pause`, puis, en jeu, laisse-toi guider. Elle attend que tu
+sois en jeu sans menu, puis que tu ouvres le menu pause (souris immobile),
+puis que tu le refermes. Trois petites zones du menu, riches en texte (chez
+RLCraft : le logo « RLCraft 1.3 »), sont ensuite vérifiées toutes les
+3 secondes. Il faut que 2 zones sur 3 correspondent, ce qui tolère un bouton
+survolé par la souris.
+
+À refaire si tu changes de résolution, d'échelle d'interface ou de pack de
+textures, ou si tu joues à un monde dont le menu pause a un autre logo.
 - **Grande image** : la dimension. Au survol : lieu et stats de la session.
 - **Petite image** : l'activité. Au survol : niveau d'XP, puis, sur RLCraft,
   compétences, set d'armure et titre de tueur de dragons.

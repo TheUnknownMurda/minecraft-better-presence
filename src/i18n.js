@@ -22,6 +22,7 @@ export const STRINGS = {
       riding: (dim) => `🐎 Riding through ${dim}`,
       swimming: () => '🌊 Swimming',
       idle: () => '💤 Idle',
+      paused: () => '⏸️ Game Paused',
       exploring: (dim) => `🧭 Exploring ${dim}`,
     },
     // Enum ActorDamageCause de Bedrock. Seul 9 (noyade) est confirme en jeu.
@@ -69,7 +70,8 @@ export const STRINGS = {
       smelting: (x) => `🔥 Cuit : ${x}`,
       riding: (dim) => `🐎 Voyage dans ${dim}`,
       swimming: () => '🌊 Nage',
-      idle: () => '💤 En pause',
+      idle: () => '💤 Inactif',
+      paused: () => '⏸️ En pause',
       exploring: (dim) => `🧭 Explore ${dim}`,
     },
     deaths: {

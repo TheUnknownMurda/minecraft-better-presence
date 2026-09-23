@@ -71,6 +71,25 @@ simples passent (`querytarget @s`, `time query`, `weather query`, `list`,
 `<insufficient permissions for selector expansion>`. Monstres proches et niveau
 d'XP sont donc indisponibles sans cheats.
 
+### Menu pause (`src/pause.js`, `npm run calibrate-pause`)
+
+Aucun signal côté jeu. Reconnaissance à l'écran par signature apprise :
+pixels stables entre deux captures en pause et absents en jeu. Le menu pause
+RLCraft (capture du 2026-09-23) : voile sombre sur la moitié gauche, logo
+« MINECRAFT RLCraft 1.3 », boutons gris « Reprendre le jeu », « Paramètres »,
+etc., et l'étiquette « Le jeu est en pause » en haut à droite.
+
+- 1ʳᵉ version : zones les plus riches en pixels clairs. Résultat : trois aplats
+  de bouton `#C6C6C6`, le gris commun à l'inventaire et aux coffres.
+- Version retenue : zones composées d'au moins 30 % de bouton ou panneau, et
+  choisies pour leur texte (pixels foncés encadrés par du clair sur leur
+  ligne), avec 40 points de texte et 40 de fond par zone. Sur ce menu, la
+  calibration a retenu le logo. Un panneau gris sans ce texte plafonne à 50 %.
+- Validé en jeu sur 4 minutes (inventaire, coffre, LVL UP, chat, pause) : les
+  pauses sont reconnues avec des zones à 81-100 %, les autres écrans ne dépassent
+  pas 56 % sur plus d'une zone, et Discord a affiché « ⏸️ Game Paused » à chaque
+  pause, puis la reprise.
+
 ### Menu principal
 
 Aucun event ne signale la sortie d'un monde (`WorldUnloaded` ne remonte
