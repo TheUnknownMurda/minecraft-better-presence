@@ -29,6 +29,7 @@ export class GameState {
 
   reset() {
     this.sessionStart = Date.now();
+    this.inMenu = false; // menu principal : connexion ouverte, aucun monde charge
     // lastMoveAt a maintenant : pas de faux "En pause" juste apres la connexion.
     this.player = { name: null, dimension: null, pos: null, travel: null, underwater: false, lastMoveAt: Date.now() };
     this.world = { day: null, timeOfDay: null, weather: null };
@@ -49,8 +50,41 @@ export class GameState {
     this.recent.push({ kind, target, at: Date.now() });
   }
 
+  /**
+   * Retour au menu principal : on oublie tout ce qui appartient au monde quitte,
+   * pour ne rien en afficher dans le monde suivant. Les compteurs de session
+   * (blocs, kills, morts) sont conserves. Renvoie vrai si l'etat a change.
+   */
+  enterMenu() {
+    if (this.inMenu) return false;
+    this.inMenu = true;
+    Object.assign(this.player, { dimension: null, pos: null, travel: null, underwater: false });
+    this.world = { day: null, timeOfDay: null, weather: null };
+    this.players = { count: null, max: null };
+    this.nearby = { monsters: 0 };
+    this.armor = { head: null, chest: null, legs: null, feet: null };
+    this.lastKill = null;
+    this.lastDeath = null;
+    this.recent = [];
+    this.rlcraft = null;
+    this.rlcraftRaw = null;
+    this.level = null;
+    this.hunger = null;
+    return true;
+  }
+
+  /** Entree dans un monde. Renvoie vrai si l'etat a change. */
+  leaveMenu() {
+    if (!this.inMenu) return false;
+    this.inMenu = false;
+    this.player.lastMoveAt = Date.now(); // pas de faux "En pause" a l'arrivee
+    return true;
+  }
+
   applyEvent(name, b) {
     const now = Date.now();
+    // Seul un monde charge emet des events.
+    this.leaveMenu();
     if (b.player) {
       this.player.name = b.player.name ?? this.player.name;
       if (b.player.dimension !== undefined) this.player.dimension = b.player.dimension;
@@ -113,6 +147,16 @@ export class GameState {
    * joueur est immobile ou le jeu en pause, sans attendre un premier event.
    */
   applyPoll({ target, time, day, weather, monsters, list }) {
+    // Au menu principal, meme `list` et `time` repondent « commande inconnue » :
+    // sans monde charge, il n'y a plus de commandes. Dans un monde, avec ou sans
+    // cheats et meme mort, ces deux-la reussissent toujours.
+    const answered = (r) => !r.timeout && !r.disconnected && !r.refused;
+    if ([target, time, list].every((r) => answered(r) && r.statusCode < 0)) {
+      this.enterMenu();
+      return;
+    }
+    if ([time, list].some((r) => r.statusCode >= 0)) this.leaveMenu();
+
     if (target.statusCode >= 0 && target.details) {
       try {
         const [me] = JSON.parse(target.details);
@@ -165,6 +209,7 @@ export class GameState {
 
   /** Deduit l'activite courante, par ordre de priorite. */
   activity(now = Date.now()) {
+    if (this.inMenu) return { kind: 'menu' };
     this.recent = this.recent.filter((a) => now - a.at < WINDOW_MS);
 
     if (this.lastDeath && now - this.lastDeath.at < 15_000) {

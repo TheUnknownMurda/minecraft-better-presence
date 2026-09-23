@@ -37,21 +37,45 @@ const state = new GameState();
 const bridge = new MinecraftBridge({ port: PORT, encryption: ENCRYPTION }).start();
 const discord = new DiscordSink(APP_ID).start();
 
+// Diagnostic : chaque nouveau type d'echec de commande est note une fois.
+const seenFailures = new Set();
+function noteFailure(commandLine, res) {
+  if (res.statusCode >= 0) return;
+  const why = res.timeout ? 'pas de reponse'
+    : res.disconnected ? 'deconnecte'
+      : `${res.statusCode} ${String(res.statusMessage ?? '').replace(/\s+/g, ' ').slice(0, 80)}`;
+  const key = `${commandLine}|${why}`;
+  if (seenFailures.has(key)) return;
+  seenFailures.add(key);
+  log(`diag : /${commandLine} -> ${why}`);
+}
+
 async function pollFast() {
   if (!bridge.connected) return;
-  const [target, time, day, weather, monsters, list] = await Promise.all([
-    bridge.command('querytarget @s'),
-    bridge.command('time query daytime'),
-    bridge.command('time query day'),
-    bridge.command('weather query'),
-    bridge.command('testfor @e[r=24,family=monster]'),
-    bridge.command('list'),
-  ]);
+  const commands = ['querytarget @s', 'time query daytime', 'time query day', 'weather query',
+    'testfor @e[r=24,family=monster]', 'list'];
+  const results = await Promise.all(commands.map((c) => bridge.command(c)));
+  commands.forEach((c, i) => noteFailure(c, results[i]));
+  const [target, time, day, weather, monsters, list] = results;
+  const wasInMenu = state.inMenu;
   state.applyPoll({ target, time, day, weather, monsters, list });
+  onMenuChange(wasInMenu);
+}
+
+/** Journalise les passages menu <-> monde ; a l'entree d'un monde, tout relire sans attendre. */
+function onMenuChange(wasInMenu) {
+  if (wasInMenu === state.inMenu) return;
+  if (state.inMenu) {
+    log('Menu principal');
+    return;
+  }
+  log('Entree dans un monde');
+  pollFast();
+  pollSlow();
 }
 
 async function pollSlow() {
-  if (!bridge.connected) return;
+  if (!bridge.connected || state.inMenu) return;
   const [scores, tags] = await Promise.all([
     bridge.command('scoreboard players list @s'),
     bridge.command('tag @s list'),
@@ -83,7 +107,9 @@ bridge.on('event', (name, body) => {
     receiving = true;
     log('Events de jeu recus');
   }
+  const wasInMenu = state.inMenu;
   state.applyEvent(name, body);
+  onMenuChange(wasInMenu);
 });
 
 discord.on('ready', (user) => log(`\x1b[32mDiscord connecte\x1b[0m (${user})`));
@@ -115,7 +141,7 @@ function warnHungerOnce(reason) {
 }
 
 async function pollHunger() {
-  if (!hud || !bridge.connected || hungerBusy) return;
+  if (!hud || !bridge.connected || hungerBusy || state.inMenu) return;
   hungerBusy = true;
   try {
     if (!screen?.alive) screen = new ScreenReader().start();
@@ -129,7 +155,8 @@ async function pollHunger() {
     // Marge d'une case au-dessus et en dessous pour le tremblement des icones.
     const img = await screen.grab(win.x + g.x, win.y + g.y - g.cell, 9 * g.period + 9 * g.cell, 11 * g.cell);
     const points = readHunger(img, { x: 0, y: g.cell, cell: g.cell, period: g.period });
-    if (points !== null) state.hunger = points;
+    // Le joueur a pu quitter le monde pendant la capture.
+    if (points !== null && !state.inMenu) state.hunger = points;
   } catch (e) {
     warnHungerOnce(`capture impossible (${e.message})`);
   } finally {
@@ -137,13 +164,16 @@ async function pollHunger() {
   }
 }
 
-setInterval(pollFast, 10_000);
+// 5 s : c'est aussi ce qui detecte le retour au menu principal.
+setInterval(pollFast, 5_000);
 setInterval(pollHunger, 5_000);
 setInterval(pollSlow, trace ? 2_000 : 30_000);
 
 // Recalcul frequent ; le sink ne pousse vers Discord que ce qui a change.
 setInterval(() => {
-  if (bridge.connected && state.player.dimension !== null) discord.set(buildActivity(state, { showCoords: SHOW_COORDS }));
+  if (bridge.connected && (state.inMenu || state.player.dimension !== null)) {
+    discord.set(buildActivity(state, { showCoords: SHOW_COORDS }));
+  }
 }, 2_000);
 
 log(`En attente de Minecraft : /connect <ton-IP-LAN>:${PORT}`);

@@ -64,6 +64,24 @@ moment.
 **Conséquence de sécurité :** n'importe quelle commande passerait par ce canal.
 `bridge.js` n'accepte donc qu'une liste blanche de lectures d'état.
 
+**Nuance (2026-09-23, monde RLCraft original sans cheats) :** les commandes
+simples passent (`querytarget @s`, `time query`, `weather query`, `list`,
+`scoreboard players list @s`), mais pas l'**expansion de sélecteurs** :
+`testfor @e[...]` et `testfor @s[lm=N]` échouent avec
+`<insufficient permissions for selector expansion>`. Monstres proches et niveau
+d'XP sont donc indisponibles sans cheats.
+
+### Menu principal
+
+Aucun event ne signale la sortie d'un monde (`WorldUnloaded` ne remonte
+jamais). En revanche, au menu, **toutes** les commandes échouent avec
+`-2147483648 « Commande inconnue : <commande> »`, y compris `list` et
+`time query`, qui réussissent toujours dans un monde (avec ou sans cheats, et
+même mort). Règle : `querytarget`, `time` et `list` en échec dans le même
+relevé signifient le menu. Le premier event reçu, ou une commande qui réussit,
+signifie l'entrée dans un monde. Validé en jeu : menu affiché 4 s après la
+détection, puis nouveau monde affiché 1 s après l'entrée.
+
 ## Format des messages (1.26)
 
 Les champs sont **directement dans `body`, en camelCase**. L'ancien format

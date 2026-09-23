@@ -92,6 +92,14 @@ La valeur précédente est alors conservée.
 - **Petite image** : l'activité. Au survol : niveau d'XP, puis, sur RLCraft,
   compétences, set d'armure et titre de tueur de dragons.
 - **Chronomètre** de session, et taille du groupe dès que ton ami est connecté.
+- **Au menu principal** : « 🏠 Main Menu », sans rien du monde quitté.
+  Détecté en 5 secondes environ ; dès l'entrée dans un monde, toutes les infos
+  sont relues immédiatement.
+
+**Dans un monde sans cheats**, le jeu refuse les sélecteurs avancés
+(`@e`, `@s[lm=…]`) : le niveau d'XP et les monstres proches n'y sont pas
+affichés. Tout le reste fonctionne : activité, soif, faim, jour, météo et
+profil RLCraft.
 
 Les noms vanilla viennent du fichier de langue officiel du jeu installé. Ceux
 de RLCraft, dont les packs sont chiffrés, viennent de

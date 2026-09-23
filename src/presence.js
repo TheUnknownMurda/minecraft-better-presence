@@ -60,6 +60,17 @@ function profile(state) {
 
 export function buildActivity(state, { showCoords = false } = {}) {
   const S = strings();
+
+  // Menu principal : rien du monde precedent, seulement le chronometre de session.
+  if (state.inMenu) {
+    return {
+      details: S.mainMenu,
+      state: 'Minecraft Bedrock',
+      startTimestamp: state.sessionStart,
+      largeImageKey: IMAGES.overworld,
+      largeImageText: 'Minecraft Bedrock',
+    };
+  }
   const dimId = S.dimensions[state.player.dimension] ? state.player.dimension : 0;
   const dim = S.dimensions[dimId];
   const a = state.activity();
