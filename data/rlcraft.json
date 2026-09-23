@@ -1,0 +1,30 @@
+{
+  "hfrlc:knight": { "en": "Knight", "fr": "Chevalier" },
+  "hfrlc:shogun": { "en": "Shogun", "fr": "Shogun" },
+  "hfrlc:dead_shooter": { "en": "Dead Shooter", "fr": "Tireur mort-vivant" },
+  "hfrlc:tree_spirit": { "en": "Tree Spirit", "fr": "Esprit de l'arbre" },
+  "hfrlc:giant_snail": { "en": "Giant Snail", "fr": "Escargot géant" },
+  "hfrlc:healingfairy": { "en": "Healing Fairy", "fr": "Fée guérisseuse" },
+  "hfrlc:wolf": { "en": "Wolf", "fr": "Loup" },
+
+  "hfrlc:paon": { "en": "Peacock", "fr": "Paon", "passive": true },
+  "hfrlc:boar": { "en": "Boar", "fr": "Sanglier", "passive": true },
+  "hfrlc:skunk": { "en": "Skunk", "fr": "Mouffette", "passive": true },
+  "hfrlc:frog": { "en": "Frog", "fr": "Grenouille", "passive": true },
+  "hfrlc:firefly": { "en": "Firefly", "fr": "Luciole", "passive": true },
+
+  "hfrlc:cattail": { "en": "Cattail", "fr": "Massette" },
+  "hfrlc:copper_coin": { "en": "Copper Coin", "fr": "Pièce de cuivre" },
+  "hfrlc:elemental_sword": { "en": "Elemental Sword", "fr": "Épée élémentaire" },
+  "hfrlc:system_level": { "en": "Level Up", "fr": "Level Up" },
+
+  "hfrlc:red_dragon_helmet": { "en": "Red Dragon Helmet", "fr": "Casque de Dragon rouge" },
+  "hfrlc:red_dragon_chestplate": { "en": "Red Dragon Chestplate", "fr": "Plastron de Dragon rouge" },
+  "hfrlc:red_dragon_leggings": { "en": "Red Dragon Leggings", "fr": "Jambières de Dragon rouge" },
+  "hfrlc:red_dragon_boots": { "en": "Red Dragon Boots", "fr": "Bottes de Dragon rouge" },
+
+  "hfrlc:panacea": { "en": "Panacea", "fr": "Panacée" },
+  "hfrlc:dragon_slayer_ring": { "en": "Dragon Slayer Ring", "fr": "Anneau du tueur de dragons" },
+  "hfrlc:ring_jump": { "en": "Ring of Jumping", "fr": "Anneau de saut" },
+  "hfrlc:dragon_slayer_cape": { "en": "Dragon Slayer Cape", "fr": "Cape du tueur de dragons" }
+}

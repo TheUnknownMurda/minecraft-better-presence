@@ -1,0 +1,22 @@
+{
+  "name": "minecraft-better-presence",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Discord Rich Presence detaillee pour Minecraft Bedrock",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/main.js",
+    "play": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/play.ps1",
+    "bg": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-presence.ps1",
+    "stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-presence.ps1",
+    "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/shortcut.ps1",
+    "shortcut:remove": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/shortcut.ps1 -Remove",
+    "calibrate": "node src/calibrate-hunger.js",
+    "probe": "node --env-file-if-exists=.env src/probe.js",
+    "rpc": "node --env-file-if-exists=.env src/rpc-test.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "@xhayper/discord-rpc": "^1.2.1"
+  }
+}
