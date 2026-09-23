@@ -224,3 +224,12 @@ bridge.js (WebSocket) ──events──> state.js (GameState) ──> presence.
 - `presence.js` : construction de l'activité Discord.
 - `discord.js` : envoi dédoublonné, limité à une mise à jour toutes les 5 s, reconnexion.
 - `probe.js`, `rpc-test.js` : outils de diagnostic de la phase d'exploration.
+
+## Licence
+
+Code sous licence [MIT](LICENSE).
+
+Projet non officiel, sans lien avec Mojang Studios, Microsoft, Discord ni
+Honeyfrost. Minecraft est une marque de Mojang Studios. Aucun fichier du jeu
+n'est distribué : les noms sont lus dans l'installation locale du joueur, et
+les images sont des liens vers le [Minecraft Wiki](https://minecraft.wiki).

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Discord Rich Presence detaillee pour Minecraft Bedrock",
+  "license": "MIT",
   "scripts": {
     "start": "node --env-file-if-exists=.env src/main.js",
     "play": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/play.ps1",
