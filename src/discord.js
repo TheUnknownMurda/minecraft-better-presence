@@ -5,7 +5,7 @@ import { Client } from '@xhayper/discord-rpc';
 const MIN_INTERVAL_MS = 5_000;  // Discord tolere ~5 mises a jour / 20 s
 const RETRY_MS = 15_000;
 
-/** Emet 'ready', 'lost' et 'sent' (activite ou null). */
+/** Emet 'ready', 'lost', 'sent' (activite ou null) et 'rejected' (message d'erreur de Discord). */
 export class DiscordSink extends EventEmitter {
   #client = null;
   #ready = false;
@@ -85,8 +85,9 @@ export class DiscordSink extends EventEmitter {
       if (this.#desired) await this.#client.user?.setActivity(this.#desired);
       else await this.#client.user?.clearActivity();
       this.emit('sent', this.#desired);
-    } catch {
+    } catch (e) {
       this.#sentKey = undefined; // on retentera au prochain changement
+      this.emit('rejected', e?.message ?? String(e));
     }
   }
 }

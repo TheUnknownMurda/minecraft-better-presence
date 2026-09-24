@@ -10,6 +10,7 @@ import { createTracer } from './trace.js';
 import { findLevel } from './level.js';
 import { readHunger } from './hunger.js';
 import { isPaused, patchScore } from './pause.js';
+import { levelRegion, readLevelText } from './levelocr.js';
 import { ScreenReader } from './screen.js';
 
 const PORT = Number(process.env.PORT ?? 19131);
@@ -115,6 +116,12 @@ bridge.on('event', (name, body) => {
 
 discord.on('ready', (user) => log(`\x1b[32mDiscord connecte\x1b[0m (${user})`));
 discord.on('lost', () => log('\x1b[33mDiscord perdu\x1b[0m, nouvelle tentative dans 15 s'));
+const rejections = new Set();
+discord.on('rejected', (msg) => {
+  if (rejections.has(msg)) return;
+  rejections.add(msg);
+  log(`\x1b[31mDiscord a refuse la mise a jour\x1b[0m : ${msg}`);
+});
 discord.on('sent', (a) => {
   if (a) log(`\x1b[36m->\x1b[0m ${a.details}  \x1b[90m|\x1b[0m ${a.state}`);
 });
@@ -172,7 +179,18 @@ async function pollScreen() {
     const img = await screen.grab(win.x + g.x, win.y + g.y - g.cell, 9 * g.period + 9 * g.cell, 11 * g.cell);
     const points = readHunger(img, { x: 0, y: g.cell, cell: g.cell, period: g.period });
     // Le joueur a pu quitter le monde pendant la capture.
-    if (points !== null && !state.inMenu) state.hunger = points;
+    if (points === null || state.inMenu) return;
+    state.hunger = points;
+
+    // HUD visible : le niveau d'XP y est lisible. Indispensable sans cheats,
+    // ou le selecteur @s[lm=N] de level.js est refuse.
+    const r = levelRegion(win, g);
+    const level = readLevelText(await screen.grab(win.x + r.x, win.y + r.y, r.w, r.h), g.cell);
+    if (level === null || state.inMenu) return;
+    if (state.level !== null && level !== state.level) {
+      warnScreenOnce(`niveau lu a l'ecran (${level}) different de celui des commandes (${state.level})`);
+    }
+    state.levelScreen = level;
   } catch (e) {
     warnScreenOnce(`capture impossible (${e.message})`);
   } finally {

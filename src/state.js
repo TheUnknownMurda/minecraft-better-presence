@@ -30,6 +30,7 @@ export class GameState {
   reset() {
     this.sessionStart = Date.now();
     this.inMenu = false; // menu principal : connexion ouverte, aucun monde charge
+    this.cameFromRlcraft = false; // monde quitte pour le menu : une partie RLCraft ?
     this.paused = false; // menu pause, reconnu a l'ecran (voir pause.js)
     // lastMoveAt a maintenant : pas de faux "En pause" juste apres la connexion.
     this.player = { name: null, dimension: null, pos: null, travel: null, underwater: false, lastMoveAt: Date.now() };
@@ -43,8 +44,14 @@ export class GameState {
     this.recent = [];
     this.rlcraft = null;
     this.rlcraftRaw = null;
-    this.level = null; // niveau d'XP, voir level.js
+    this.level = null; // niveau d'XP par commande (level.js), null sans cheats
+    this.levelScreen = null; // niveau d'XP lu sur le HUD (levelocr.js)
     this.hunger = null; // 0 a 20, lue a l'ecran, voir hunger.js
+  }
+
+  /** Niveau d'XP : la commande quand elle est disponible, sinon la lecture ecran. */
+  get xpLevel() {
+    return this.level ?? this.levelScreen;
   }
 
   #push(kind, target) {
@@ -59,6 +66,7 @@ export class GameState {
   enterMenu() {
     if (this.inMenu) return false;
     this.inMenu = true;
+    this.cameFromRlcraft = this.rlcraft !== null; // avant d'oublier le monde quitte
     this.paused = false;
     Object.assign(this.player, { dimension: null, pos: null, travel: null, underwater: false });
     this.world = { day: null, timeOfDay: null, weather: null };
@@ -71,6 +79,7 @@ export class GameState {
     this.rlcraft = null;
     this.rlcraftRaw = null;
     this.level = null;
+    this.levelScreen = null;
     this.hunger = null;
     return true;
   }

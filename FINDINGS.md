@@ -68,8 +68,8 @@ moment.
 simples passent (`querytarget @s`, `time query`, `weather query`, `list`,
 `scoreboard players list @s`), mais pas l'**expansion de sélecteurs** :
 `testfor @e[...]` et `testfor @s[lm=N]` échouent avec
-`<insufficient permissions for selector expansion>`. Monstres proches et niveau
-d'XP sont donc indisponibles sans cheats.
+`<insufficient permissions for selector expansion>`. Les monstres proches sont
+donc indisponibles sans cheats ; le niveau d'XP y est lu à l'écran (voir plus bas).
 
 ### Menu pause (`src/pause.js`, `npm run calibrate-pause`)
 
@@ -89,6 +89,32 @@ etc., et l'étiquette « Le jeu est en pause » en haut à droite.
   pauses sont reconnues avec des zones à 81-100 %, les autres écrans ne dépassent
   pas 56 % sur plus d'une zone, et Discord a affiché « ⏸️ Game Paused » à chaque
   pause, puis la reprise.
+
+### Niveau d'XP lu à l'écran (`src/levelocr.js`)
+
+Sans cheats, `@s[lm=N]` est refusé. Le niveau est affiché en vert `#7FFF00`
+(ombre `#204000`), centré au-dessus de la barre d'XP, à la hauteur de la barre
+de faim, dans la police pixel de Minecraft : chiffres de 5×7 pixels espacés de
+1, agrandis au même facteur que les icônes du HUD (×5 en 4K).
+
+- La police n'est pas lisible dans l'installation (`font/` ne contient que
+  `minecraft-ten.ttf` et des `.fontdata`) : modèles relevés de mémoire. Le « 5 »
+  a été vérifié pixel à pixel sur le HUD. Distance minimale entre deux modèles :
+  3 pixels sur 35 (le 3 et le 8). Un chiffre à plus de 3 pixels de tout modèle,
+  ou à égalité entre deux, fait rejeter la lecture.
+- Lectures en jeu dans le monde RLCraft sans cheats : 5 (vérifié pixel à
+  pixel), puis 6. Chaque monde a
+  son propre joueur (17035 dans la copie avec cheats au même moment).
+- Quand la commande et l'écran donnent tous deux un niveau (monde avec
+  cheats), un désaccord est noté dans le journal.
+
+### Nombre de joueurs
+
+`list` donne `currentPlayerCount` et `maxPlayerCount`, y compris sans cheats.
+Le champ `party` de Discord les affiche en « (1 of 8) », mais toujours **en fin**
+du champ `state`, précédé d'une icône de groupe (constaté sur le profil). Pour
+les avoir en tête de ligne, la presence les écrit elle-même (`👥 1/8`) et
+n'utilise plus ce champ.
 
 ### Menu principal
 

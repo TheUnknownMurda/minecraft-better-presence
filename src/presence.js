@@ -63,24 +63,34 @@ function profile(state) {
 export function buildActivity(state, { showCoords = false } = {}) {
   const S = strings();
 
-  // Menu principal : rien du monde precedent, seulement le chronometre de session.
+  // Menu principal : rien du monde precedent, seulement le chronometre de
+  // session, et le nom du modpack si l'on sort d'une partie RLCraft.
   if (state.inMenu) {
+    const title = state.cameFromRlcraft ? S.rlcraftTitle : 'Minecraft Bedrock';
     return {
       details: S.mainMenu,
-      state: 'Minecraft Bedrock',
+      state: title,
       startTimestamp: state.sessionStart,
       largeImageKey: IMAGES.overworld,
-      largeImageText: 'Minecraft Bedrock',
+      largeImageText: title,
     };
   }
   const dimId = S.dimensions[state.player.dimension] ? state.player.dimension : 0;
   const dim = S.dimensions[dimId];
   const a = state.activity();
 
+  // Joueurs dans la partie, en tete de ligne. Pas via le champ « party » de
+  // Discord : il colle toujours « (1 of 8) » en fin de ligne. Valeurs
+  // incoherentes ignorees.
+  const { count, max } = state.players;
+  const players = Number.isInteger(count) && Number.isInteger(max) && count >= 1 && max >= count;
+
   const stateLine = [
+    players && S.players(count, max),
     Number.isFinite(state.rlcraft?.thirst) && S.thirst(state.rlcraft.thirst),
     state.hunger !== null && S.hunger(state.hunger / 2),
-    state.level !== null && S.level(state.level),
+    // Comme le jeu, on n'affiche pas un niveau 0.
+    state.xpLevel > 0 && S.level(state.xpLevel),
     state.world.day !== null && S.day(state.world.day),
     timeOfDay(state.world.timeOfDay),
     S.weather[state.world.weather],
@@ -101,10 +111,5 @@ export function buildActivity(state, { showCoords = false } = {}) {
     smallImageKey: IMAGES[a.kind] ?? IMAGES.exploring,
     smallImageText: fit(profile(state) || describe(a, dim)),
   };
-
-  if (state.players.count > 1) {
-    activity.partySize = state.players.count;
-    activity.partyMax = state.players.max;
-  }
   return activity;
 }

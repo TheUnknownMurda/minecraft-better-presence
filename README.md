@@ -6,7 +6,7 @@ ce que tu fais vraiment :
 
 ```
 ⚔️ Defeated: Knight
-💧 8/10 · 🍗 7.5/10 · ⭐ Lv 16840 · Day 30 · 🌙 Night · 👹 2 hostiles nearby
+👥 2/8 · 💧 8/10 · 🍗 7.5/10 · ⭐ Lv 16840 · Day 30 · 🌙 Night · 👹 2 hostiles nearby
 ```
 
 Conçu et testé sur **RLCraft 1.3** (HoneyFrost), mais fonctionne aussi en
@@ -18,14 +18,15 @@ dans [FINDINGS.md](FINDINGS.md).
 - **Ligne 1, l'activité déduite** : combat (*Defeated: Knight*), chasse
   (*Hunting: Boar*), minage, construction, craft, cuisson, nage, monture,
   exploration, inactivité, mort avec sa cause (*Drowned*).
-- **Ligne 2** : soif (RLCraft), faim, niveau d'XP, jour, jour ou nuit, météo
-  et monstres proches.
+- **Ligne 2** : nombre de joueurs dans la partie (`👥 1/8`), soif (RLCraft),
+  faim, niveau d'XP, jour, jour ou nuit, météo et monstres proches.
 - **Grande image** : la dimension (Overworld, Nether, End). Au survol : le lieu
   et les stats de la session (blocs, kills, morts).
 - **Petite image** : l'activité. Au survol, sur RLCraft : compétences, set
   d'armure et titre de tueur de dragons.
-- **Chronomètre** de session, et taille du groupe dès qu'un ami est connecté.
-- **États particuliers** : « 🏠 Main Menu » au menu principal, « ⏸️ Game Paused »
+- **Chronomètre** de session.
+- **États particuliers** : « 🏠 Main Menu » au menu principal (avec « RL Craft
+  1.3 » en deuxième ligne quand on sort d'une partie RLCraft), « ⏸️ Game Paused »
   dans le menu pause.
 
 Les noms viennent du fichier de langue officiel du jeu installé, et sont
@@ -40,8 +41,8 @@ toutes extérieures au jeu :
    déplacements…) et des commandes de **lecture** (heure, météo, scoreboards de
    RLCraft…). La connexion est chiffrée, et une liste blanche empêche toute
    commande qui modifierait le jeu.
-2. **L'écran** : la faim et le menu pause, qu'aucune commande ne donne, sont
-   lus sur le HUD, uniquement dans de petites zones et sans rien enregistrer.
+2. **L'écran** : la faim, le menu pause et, sans cheats, le niveau d'XP, qu'aucune
+   commande ne donne, sont lus sur le HUD, uniquement dans de petites zones et sans rien enregistrer.
 3. **Discord**, par son interface locale (IPC) : la presence s'y met à jour
    au plus toutes les 5 secondes, et seulement quand quelque chose change.
 
@@ -126,6 +127,12 @@ non reconnu, ou couleurs inattendues (menu ouvert, effet de faim qui verdit les
 cuisses). La valeur précédente est alors conservée. `npm run calibrate` laisse
 30 secondes pour revenir en jeu, HUD visible.
 
+**Niveau d'XP.** Dans un monde sans cheats, la commande qui donne le niveau
+est refusée : la presence lit alors le nombre vert affiché au-dessus de la
+barre d'XP, chiffre par chiffre, dans la police du jeu. Aucune calibration de
+plus : elle réutilise celle de la faim. Un chiffre ambigu fait rejeter la
+lecture plutôt qu'afficher un mauvais niveau.
+
 **Menu pause.** Le jeu ne le signale pas, et en multijoueur rien ne se fige.
 `npm run calibrate-pause` apprend donc sa signature : il attend que tu sois en
 jeu, puis que tu ouvres le menu pause (souris immobile), puis que tu le
@@ -151,14 +158,15 @@ de cette liste au lancement suivant.
 
 ## Limites connues
 
-- **Dans un monde sans cheats**, le jeu refuse les sélecteurs avancés
-  (`@e`, `@s[lm=…]`) : **pas de niveau d'XP ni de monstres proches**. Tout le
-  reste fonctionne.
+- **Dans un monde sans cheats**, le jeu refuse les sélecteurs avancés (`@e`,
+  `@s[lm=…]`) : **pas de monstres proches**, et le niveau d'XP n'y est connu
+  que par la lecture de l'écran, donc quand Minecraft est au premier plan.
 - `/connect` est à retaper à chaque lancement du jeu, depuis un monde avec cheats.
 - Le fonctionnement sans cheats repose sur une faille : le jeu ne vérifie les
   cheats qu'au moment du `/connect`. Mojang peut la corriger. On perdrait alors
   les commandes dans ces mondes, probablement pas les events.
-- Faim et pause ne sont lues que lorsque Minecraft est au premier plan.
+- Faim, pause et niveau lu à l'écran ne sont mis à jour que lorsque Minecraft
+  est au premier plan.
 - Non disponibles sans behavior pack, qui désactiverait les succès : points de
   vie exacts, biome, effets actifs. La température RLCraft est mesurée mais
   pas affichée (échelle non calibrée).
@@ -170,7 +178,7 @@ bridge.js (WebSocket chiffré) ──events──> state.js ──> presence.js 
       ^         liste blanche                 ^               |
       └──── commandes de lecture ─────────────┤        names.js + i18n.js
                                               │        + data/rlcraft.json
-screen.js (captures) ──> hunger.js, pause.js ─┘
+screen.js (captures) ──> hunger.js, pause.js, levelocr.js ─┘
 ```
 
 | Module | Rôle |
@@ -181,7 +189,8 @@ screen.js (captures) ──> hunger.js, pause.js ─┘
 | `presence.js` | Construction de l'activité Discord. |
 | `discord.js` | Envoi dédoublonné, au plus une mise à jour toutes les 5 s, reconnexion. |
 | `names.js`, `i18n.js` | Noms du jeu et de RLCraft, textes en anglais et en français. |
-| `level.js` | Niveau d'XP par dichotomie sur `@s[lm=N]`. |
+| `level.js` | Niveau d'XP par dichotomie sur `@s[lm=N]` (mondes avec cheats). |
+| `levelocr.js` | Niveau d'XP lu à l'écran (mondes sans cheats). |
 | `screen.js` | Captures de zones de la fenêtre Minecraft (PowerShell + GDI). |
 | `hunger.js`, `pause.js` | Lecture de la barre de faim, reconnaissance du menu pause. |
 | `calibrate-hunger.js`, `calibrate-pause.js` | Calibrations correspondantes. |
