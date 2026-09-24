@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { MinecraftBridge } from './bridge.js';
 import { GameState } from './state.js';
-import { buildActivity } from './presence.js';
+import { buildActivity, menuActivity } from './presence.js';
 import { DiscordSink } from './discord.js';
 import { setLanguage } from './names.js';
 import { createTracer } from './trace.js';
@@ -113,10 +113,9 @@ bridge.on('connected', (from, encrypted, refusal) => {
   pollSlow();
 });
 bridge.on('warning', (msg) => log(`\x1b[33mAttention\x1b[0m : ${msg}`));
-bridge.on('disconnected', () => {
-  log('\x1b[33mMinecraft deconnecte\x1b[0m : presence effacee');
-  discord.clear();
-});
+// Le jeu peut encore tourner : l'affichage retombe alors sur le menu principal,
+// ou s'efface (voir la boucle d'affichage).
+bridge.on('disconnected', () => log('\x1b[33mMinecraft deconnecte\x1b[0m'));
 bridge.on('event', (name, body) => {
   if (!receiving) {
     receiving = true;
@@ -136,7 +135,7 @@ discord.on('rejected', (msg) => {
   log(`\x1b[31mDiscord a refuse la mise a jour\x1b[0m : ${msg}`);
 });
 discord.on('sent', (a) => {
-  if (a) log(`\x1b[36m->\x1b[0m ${a.details}  \x1b[90m|\x1b[0m ${a.state}`);
+  log(a ? `\x1b[36m->\x1b[0m ${a.details}  \x1b[90m|\x1b[0m ${a.state}` : '\x1b[36m->\x1b[0m (statut efface)');
 });
 
 // Lecture de l'ecran (faim, niveau, pause, inventaire, coffre), seulement quand Minecraft est au
@@ -172,9 +171,29 @@ function warnScreenOnce(reason) {
   log(`Ecran : ${reason}`);
 }
 
+/** Signatures des ecrans qui masquent le HUD, ou des menus dessines par-dessus (HUD visible). */
+function signaturesFor(overlay) {
+  return Object.fromEntries(Object.entries(hud.screens ?? {}).filter(([, s]) => !!s.overlay === overlay));
+}
+
+// Sans WebSocket, seul l'ecran dit si un monde est ouvert : HUD visible, ou
+// ecran de jeu reconnu (pause, inventaire...). Il faut deux releves sans cette
+// preuve pour conclure au menu : un ecran non appris ne fait que passer.
+let worldOnScreen = false;
+let noWorldPolls = 0;
+
+function noteWorldOnScreen(seen) {
+  if (seen) {
+    worldOnScreen = true;
+    noWorldPolls = 0;
+  } else if (++noWorldPolls >= 2) {
+    worldOnScreen = false;
+  }
+}
+
 async function pollScreen() {
-  // Tourne aussi au menu : un HUD visible y prouverait qu'on est en jeu.
-  if (!hud || !bridge.connected || screenBusy) return;
+  // Tourne aussi au menu et sans WebSocket : un HUD visible y prouve qu'un monde est ouvert.
+  if (!hud || !(gameRunning || bridge.connected) || screenBusy) return;
   screenBusy = true;
   try {
     if (!screen?.alive) screen = new ScreenReader().start();
@@ -184,12 +203,16 @@ async function pollScreen() {
       warnScreenOnce(`fenetre en ${win.w}x${win.h} au lieu de ${hud.window.w}x${hud.window.h}, relance \`npm run calibrate\``);
       return;
     }
+    const grab = (p) => screen.grab(win.x + p.x, win.y + p.y, p.w, p.h);
 
     const g = hud.hunger;
     // Marge d'une case au-dessus et en dessous pour le tremblement des icones.
     const img = await screen.grab(win.x + g.x, win.y + g.y - g.cell, 9 * g.period + 9 * g.cell, 11 * g.cell);
     const points = readHunger(img, { x: 0, y: g.cell, cell: g.cell, period: g.period });
-    if (state.inMenu) {
+    if (!bridge.connected || state.inMenu) {
+      let seen = points !== null;
+      if (!seen && !bridge.connected) seen = (await recognize(signaturesFor(false), grab)) !== null;
+      noteWorldOnScreen(seen);
       if (points !== null) state.lastHudAt = Date.now(); // faux menu : applyPoll le corrigera
       return;
     }
@@ -197,15 +220,11 @@ async function pollScreen() {
     // Barre de faim masquee : un ecran recouvre le HUD (pause, inventaire,
     // coffre, ou un autre non calibre). Visible : en jeu, ou dans un menu
     // dessine par-dessus le jeu (menu LVL UP).
-    let shown = null;
-    if (hud.screens) {
-      const overlay = points !== null;
-      const pool = Object.fromEntries(Object.entries(hud.screens).filter(([, s]) => !!s.overlay === overlay));
-      shown = await recognize(pool, (p) => screen.grab(win.x + p.x, win.y + p.y, p.w, p.h));
-      shown = SCREEN_AS[shown] ?? shown;
-    }
+    let shown = await recognize(signaturesFor(points !== null), grab);
+    shown = SCREEN_AS[shown] ?? shown;
     if (state.inMenu) return; // le joueur a pu quitter le monde pendant les captures
     // HUD ou ecran de jeu visible : preuve que l'on est en jeu (voir applyPoll).
+    noteWorldOnScreen(points !== null || shown !== null);
     if (points !== null || shown) state.lastHudAt = Date.now();
     if (shown !== state.screen) {
       log(shown ? SCREEN_LOG[shown] ?? shown : points === null ? 'Autre ecran (non reconnu)' : 'Retour en jeu');
@@ -230,6 +249,46 @@ async function pollScreen() {
   }
 }
 
+// Processus du jeu, releve toutes les 5 s. Sans WebSocket (avant le /connect),
+// c'est lui qui dit que le jeu tourne. Avec --with-game (raccourci « Minecraft +
+// Presence »), la presence vit et meurt avec lui, independamment de la
+// connexion (absente avant le /connect, ou coupee par /connect off).
+const GAME_EXE = 'Minecraft.Windows.exe';
+const GAME_START_TIMEOUT_MS = 3 * 60_000;
+const WITH_GAME = process.argv.includes('--with-game');
+const launchedAt = Date.now();
+let gameRunning = false;
+let gameSeen = false;
+
+function isGameRunning() {
+  return new Promise((resolve) => {
+    execFile('tasklist', ['/FI', `IMAGENAME eq ${GAME_EXE}`, '/NH', '/FO', 'CSV'], { windowsHide: true },
+      (err, out) => resolve(!err && out.includes(GAME_EXE)));
+  });
+}
+
+async function watchGame() {
+  const running = await isGameRunning();
+  if (running && !gameRunning) {
+    gameSeen = true;
+    // Nouvelle partie de jeu : menu principal, chronometre depuis le lancement.
+    // Une connexion deja rouverte (presence relancee, jeu ouvert) garde son etat.
+    if (!bridge.connected) state.reset();
+    state.sessionStart = Date.now();
+    log(WITH_GAME ? 'Minecraft detecte : la presence s\'arretera a la fermeture du jeu' : 'Minecraft detecte');
+  } else if (!running && gameRunning) {
+    if (WITH_GAME) await shutdown('Minecraft ferme : arret de la presence');
+    log('Minecraft ferme');
+    worldOnScreen = false;
+    noWorldPolls = 0;
+  } else if (WITH_GAME && !gameSeen && Date.now() - launchedAt > GAME_START_TIMEOUT_MS) {
+    await shutdown('Minecraft n\'a pas demarre en 3 minutes : arret de la presence');
+  }
+  gameRunning = running;
+}
+
+watchGame();
+setInterval(watchGame, 5_000);
 // 5 s : c'est aussi ce qui detecte le retour au menu principal.
 setInterval(pollFast, 5_000);
 setInterval(pollScreen, 3_000);
@@ -237,8 +296,14 @@ setInterval(pollSlow, trace ? 2_000 : 30_000);
 
 // Recalcul frequent ; le sink ne pousse vers Discord que ce qui a change.
 setInterval(() => {
-  if (bridge.connected && (state.inMenu || state.player.dimension !== null)) {
-    discord.set(buildActivity(state, { showCoords: SHOW_COORDS }));
+  if (bridge.connected) {
+    if (state.inMenu || state.player.dimension !== null) discord.set(buildActivity(state, { showCoords: SHOW_COORDS }));
+  } else if (gameRunning && !worldOnScreen) {
+    // Jeu lance, pas (encore) de /connect : le menu principal.
+    discord.set(menuActivity(state));
+  } else {
+    // Jeu ferme, ou un monde a l'ecran sans /connect : rien de sur a afficher.
+    discord.clear();
   }
 }, 2_000);
 
@@ -252,32 +317,3 @@ async function shutdown(reason) {
 }
 
 process.on('SIGINT', () => shutdown('Arret demande'));
-
-// --with-game (raccourci « Minecraft + Presence ») : la presence vit et meurt
-// avec le processus du jeu, independamment de la connexion WebSocket (qui peut
-// etre absente avant le /connect, ou coupee par /connect off).
-const GAME_EXE = 'Minecraft.Windows.exe';
-const GAME_START_TIMEOUT_MS = 3 * 60_000;
-
-function isGameRunning() {
-  return new Promise((resolve) => {
-    execFile('tasklist', ['/FI', `IMAGENAME eq ${GAME_EXE}`, '/NH', '/FO', 'CSV'], { windowsHide: true },
-      (err, out) => resolve(!err && out.includes(GAME_EXE)));
-  });
-}
-
-if (process.argv.includes('--with-game')) {
-  const launchedAt = Date.now();
-  let seen = false;
-  setInterval(async () => {
-    const running = await isGameRunning();
-    if (running && !seen) {
-      seen = true;
-      log('Minecraft detecte : la presence s\'arretera a la fermeture du jeu');
-    } else if (!running && seen) {
-      await shutdown('Minecraft ferme : arret de la presence');
-    } else if (!running && Date.now() - launchedAt > GAME_START_TIMEOUT_MS) {
-      await shutdown('Minecraft n\'a pas demarre en 3 minutes : arret de la presence');
-    }
-  }, 5_000);
-}

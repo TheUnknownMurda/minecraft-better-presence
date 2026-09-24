@@ -24,11 +24,13 @@ function mostCommon(values) {
 
 export class GameState {
   constructor() {
+    // Chronometre Discord : garde d'une connexion a l'autre (main.js le cale
+    // sur le lancement du jeu).
+    this.sessionStart = Date.now();
     this.reset();
   }
 
   reset() {
-    this.sessionStart = Date.now();
     this.inMenu = false; // menu principal : connexion ouverte, aucun monde charge
     this.cameFromRlcraft = false; // monde quitte pour le menu : une partie RLCraft ?
     this.screen = null; // ecran reconnu : 'pause', 'inventory', 'chest', 'trinkets' ou 'lvlup' (screens.js)

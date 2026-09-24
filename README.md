@@ -78,7 +78,8 @@ Discord **desktop** (la version web ne suffit pas) et Minecraft Bedrock.
 ## Utilisation au quotidien
 
 1. Lance le jeu avec le raccourci **« Minecraft + Presence »**. La presence
-   démarre en arrière-plan, sans fenêtre.
+   démarre en arrière-plan, sans fenêtre, et affiche « 🏠 Main Menu » dès que
+   le jeu tourne, avant tout `/connect`.
 2. Ouvre un monde **avec cheats**, qui ne sert qu'à ça, et tape
    `/connect <ton-IP-LAN>:19131`. Ton IP locale est donnée par `ipconfig`
    (ligne *Adresse IPv4*). Passer par l'IP locale plutôt que `localhost`
@@ -185,6 +186,10 @@ de cette liste au lancement suivant.
   `@s[lm=…]`) : **pas de monstres proches**, et le niveau d'XP n'y est connu
   que par la lecture de l'écran, donc quand Minecraft est au premier plan.
 - `/connect` est à retaper à chaque lancement du jeu, depuis un monde avec cheats.
+  Entre l'ouverture d'un monde et le `/connect`, la presence n'affiche rien :
+  sans connexion, elle sait seulement qu'un monde est ouvert (HUD visible), pas
+  ce qui s'y passe. Sans calibration de l'écran, elle ne le sait pas non plus
+  et garde « Main Menu » jusqu'au `/connect`.
 - Le fonctionnement sans cheats repose sur une faille : le jeu ne vérifie les
   cheats qu'au moment du `/connect`. Mojang peut la corriger. On perdrait alors
   les commandes dans ces mondes, probablement pas les events.

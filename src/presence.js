@@ -68,21 +68,26 @@ function profile(state) {
   return parts.join(' · ');
 }
 
+/**
+ * Menu principal : rien du monde precedent, seulement le chronometre de
+ * session, et le nom du modpack si l'on sort d'une partie RLCraft. Aussi
+ * affiche au lancement du jeu, avant tout /connect.
+ */
+export function menuActivity(state) {
+  const S = strings();
+  const title = state.cameFromRlcraft ? S.rlcraftTitle : 'Minecraft Bedrock';
+  return {
+    details: S.mainMenu,
+    state: title,
+    startTimestamp: state.sessionStart,
+    largeImageKey: IMAGES.overworld,
+    largeImageText: title,
+  };
+}
+
 export function buildActivity(state, { showCoords = false } = {}) {
   const S = strings();
-
-  // Menu principal : rien du monde precedent, seulement le chronometre de
-  // session, et le nom du modpack si l'on sort d'une partie RLCraft.
-  if (state.inMenu) {
-    const title = state.cameFromRlcraft ? S.rlcraftTitle : 'Minecraft Bedrock';
-    return {
-      details: S.mainMenu,
-      state: title,
-      startTimestamp: state.sessionStart,
-      largeImageKey: IMAGES.overworld,
-      largeImageText: title,
-    };
-  }
+  if (state.inMenu) return menuActivity(state);
   const dimId = S.dimensions[state.player.dimension] ? state.player.dimension : 0;
   const dim = S.dimensions[dimId];
   const a = state.activity();
