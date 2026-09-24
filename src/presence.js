@@ -17,6 +17,10 @@ const IMAGES = {
   swimming: `${WIKI}Water_Bucket_JE2_BE2.png`,
   idle: `${WIKI}Red_Bed_JE4_BE2_%28facing_NWU%29.png`,
   paused: `${WIKI}Clock_JE2_BE2.png`,
+  inventory: `${WIKI}Bundle_JE2_BE2.png`,
+  chest: `${WIKI}Chest_%28S%29.png`,
+  trinkets: `${WIKI}Totem_of_Undying_JE2_BE2.png`,
+  lvlup: `${WIKI}Bottle_o%27_Enchanting_JE2_BE2.png`,
   dead: `${WIKI}Heart_0_%28icon%29.png`,
   exploring: `${WIKI}Compass_JE2_BE2.png`,
 };
@@ -39,6 +43,10 @@ function describe(a, dim) {
     case 'swimming':  return t.swimming();
     case 'idle':      return t.idle();
     case 'paused':    return t.paused();
+    case 'inventory': return t.inventory();
+    case 'chest':     return t.chest();
+    case 'trinkets':  return t.trinkets();
+    case 'lvlup':     return t.lvlup();
     default:          return t.exploring(dim.in);
   }
 }

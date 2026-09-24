@@ -26,8 +26,10 @@ dans [FINDINGS.md](FINDINGS.md).
   d'armure et titre de tueur de dragons.
 - **Chronomètre** de session.
 - **États particuliers** : « 🏠 Main Menu » au menu principal (avec « RL Craft
-  1.3 » en deuxième ligne quand on sort d'une partie RLCraft), « ⏸️ Game Paused »
-  dans le menu pause.
+  1.3 » en deuxième ligne quand on sort d'une partie RLCraft), et les écrans
+  ouverts : « ⏸️ Game Paused », « 🎒 In Inventory », « 📦 In a Chest » (coffre
+  simple ou grand coffre) et, sur RLCraft, « 💍 In the Trinket Pouch » et
+  « 📈 In the LVL UP Menu ».
 
 Les noms viennent du fichier de langue officiel du jeu installé, et sont
 affichés en anglais ou en français au choix.
@@ -41,8 +43,9 @@ toutes extérieures au jeu :
    déplacements…) et des commandes de **lecture** (heure, météo, scoreboards de
    RLCraft…). La connexion est chiffrée, et une liste blanche empêche toute
    commande qui modifierait le jeu.
-2. **L'écran** : la faim, le menu pause et, sans cheats, le niveau d'XP, qu'aucune
-   commande ne donne, sont lus sur le HUD, uniquement dans de petites zones et sans rien enregistrer.
+2. **L'écran** : la faim, l'écran ouvert (pause, inventaire, coffre…) et, sans
+   cheats, le niveau d'XP, qu'aucune commande ne donne, sont lus à l'écran,
+   uniquement dans de petites zones et sans rien enregistrer.
 3. **Discord**, par son interface locale (IPC) : la presence s'y met à jour
    au plus toutes les 5 secondes, et seulement quand quelque chose change.
 
@@ -68,9 +71,9 @@ Discord **desktop** (la version web ne suffit pas) et Minecraft Bedrock.
 4. **Raccourci** : `npm run shortcut` crée **« Minecraft + Presence »** sur le
    bureau et dans le menu Démarrer, d'où tu peux l'épingler à la barre des tâches.
 
-5. **Faim et pause** (facultatif) : en jeu, lance `npm run calibrate`, puis
-   `npm run calibrate-pause`, et laisse-toi guider. Voir
-   [Lecture de l'écran](#lecture-de-lécran-faim-et-pause).
+5. **Faim et écrans** (facultatif) : en jeu, lance `npm run calibrate`, puis
+   `npm run calibrate-screens`, et laisse-toi guider. Voir
+   [Lecture de l'écran](#lecture-de-lécran-faim-et-écrans).
 
 ## Utilisation au quotidien
 
@@ -97,7 +100,7 @@ presence ne démarre pas. Utilise alors `npm run bg`, puis `npm run stop`.
 | `npm run bg` / `npm run stop` | Presence en arrière-plan sans lien avec le jeu / arrêt. |
 | `npm run shortcut` / `shortcut:remove` | Crée ou supprime les raccourcis. |
 | `npm run calibrate` | Repère la barre de faim à l'écran. |
-| `npm run calibrate-pause` | Apprend à reconnaître le menu pause (après `calibrate`). |
+| `npm run calibrate-screens` | Apprend à reconnaître les écrans (après `calibrate`). `-- trinkets lvlup` : seulement ceux-là. |
 | `npm run probe` / `npm run rpc` | Outils de diagnostic, voir [plus bas](#outils-de-diagnostic). |
 
 En arrière-plan, le journal est dans `logs/presence.log`, et la session
@@ -114,7 +117,7 @@ précédente dans `presence.log.old`.
 | `ENCRYPTION` | `1` | `0` pour une connexion en clair (débogage) |
 | `TRACE_RLCRAFT` | `0` | `1` pour enregistrer les scoreboards et tags RLCraft dans `logs/rlcraft-trace.jsonl` (calibrage) |
 
-## Lecture de l'écran (faim et pause)
+## Lecture de l'écran (faim et écrans)
 
 La presence ne regarde que de petites zones de la fenêtre Minecraft, et
 seulement quand le jeu est au premier plan. Le reste du temps, elle garde les
@@ -133,16 +136,36 @@ barre d'XP, chiffre par chiffre, dans la police du jeu. Aucune calibration de
 plus : elle réutilise celle de la faim. Un chiffre ambigu fait rejeter la
 lecture plutôt qu'afficher un mauvais niveau.
 
-**Menu pause.** Le jeu ne le signale pas, et en multijoueur rien ne se fige.
-`npm run calibrate-pause` apprend donc sa signature : il attend que tu sois en
-jeu, puis que tu ouvres le menu pause (souris immobile), puis que tu le
-refermes. Trois petites zones riches en texte (chez RLCraft, le logo
-« RLCraft 1.3 ») sont ensuite vérifiées toutes les 3 secondes. Il en faut 2
-sur 3, ce qui tolère un bouton survolé par la souris.
+**Écrans ouverts.** Le jeu ne signale ni le menu pause, ni l'inventaire, ni les
+coffres, et en multijoueur rien ne se fige. `npm run calibrate-screens` apprend
+donc leur signature, dans l'ordre : menu pause, inventaire, coffre simple,
+grand coffre, poche à trinkets et menu LVL UP. Chaque écran s'ouvre **deux
+fois de suite** (deux coffres au contenu différent), souris hors des cases et
+des boutons. En plein écran, le terminal n'est pas visible : chaque étape se
+signale par un bip.
+
+| Bip | Signification |
+|---|---|
+| aigu | capture faite : ferme l'écran |
+| double | ouvre maintenant le menu LVL UP (7 secondes) |
+| grave | mauvais écran ou fermé trop tôt : recommence l'écran en cours |
+| trois notes montantes | terminé |
+
+Une signature ne retient que ce qui ne change pas en jouant : titres, bordures
+des cases et fond des panneaux, jamais le contenu des cases. Le menu LVL UP
+laisse le HUD visible : il est reconnu à son texte d'aide (« Left/Right to
+change Skill Category »…), pas à tes niveaux ni à la sélection. Chaque écran a
+trois zones, vérifiées toutes les 3 secondes ; il en faut deux à 90 %, ce qui
+tolère une infobulle ou un bouton survolé. Un écran non appris (table de
+craft, four…) affiche l'activité normale.
+
+`npm run calibrate-screens -- trinkets lvlup` n'apprend que les écrans nommés
+et garde les autres.
 
 **À recalibrer** si tu changes de résolution, d'échelle d'interface ou de
-pack de textures, ou pour la pause, si le menu pause de ton monde a un autre
-logo. La presence signale un changement de taille de fenêtre dans son journal.
+pack de textures, ou si un écran n'est plus reconnu (par exemple l'inventaire
+avec le livre de recettes ouvert, s'il était fermé à la calibration). La
+presence signale un changement de taille de fenêtre dans son journal.
 
 ## Noms RLCraft
 
@@ -165,8 +188,8 @@ de cette liste au lancement suivant.
 - Le fonctionnement sans cheats repose sur une faille : le jeu ne vérifie les
   cheats qu'au moment du `/connect`. Mojang peut la corriger. On perdrait alors
   les commandes dans ces mondes, probablement pas les events.
-- Faim, pause et niveau lu à l'écran ne sont mis à jour que lorsque Minecraft
-  est au premier plan.
+- Faim, écrans ouverts et niveau lu à l'écran ne sont mis à jour que lorsque
+  Minecraft est au premier plan.
 - Non disponibles sans behavior pack, qui désactiverait les succès : points de
   vie exacts, biome, effets actifs. La température RLCraft est mesurée mais
   pas affichée (échelle non calibrée).
@@ -178,22 +201,22 @@ bridge.js (WebSocket chiffré) ──events──> state.js ──> presence.js 
       ^         liste blanche                 ^               |
       └──── commandes de lecture ─────────────┤        names.js + i18n.js
                                               │        + data/rlcraft.json
-screen.js (captures) ──> hunger.js, pause.js, levelocr.js ─┘
+screen.js (captures) ──> hunger.js, screens.js, levelocr.js ─┘
 ```
 
 | Module | Rôle |
 |---|---|
 | `main.js` | Orchestration : relevés périodiques, menu principal, lien avec le processus du jeu. |
 | `bridge.js` | Serveur WebSocket : chiffrement, abonnements, commandes filtrées par liste blanche. |
-| `state.js` | État normalisé, déduction de l'activité, stats RLCraft, menu et pause. |
+| `state.js` | État normalisé, déduction de l'activité, stats RLCraft, menu principal et écrans. |
 | `presence.js` | Construction de l'activité Discord. |
 | `discord.js` | Envoi dédoublonné, au plus une mise à jour toutes les 5 s, reconnexion. |
 | `names.js`, `i18n.js` | Noms du jeu et de RLCraft, textes en anglais et en français. |
 | `level.js` | Niveau d'XP par dichotomie sur `@s[lm=N]` (mondes avec cheats). |
 | `levelocr.js` | Niveau d'XP lu à l'écran (mondes sans cheats). |
 | `screen.js` | Captures de zones de la fenêtre Minecraft (PowerShell + GDI). |
-| `hunger.js`, `pause.js` | Lecture de la barre de faim, reconnaissance du menu pause. |
-| `calibrate-hunger.js`, `calibrate-pause.js` | Calibrations correspondantes. |
+| `hunger.js`, `screens.js` | Lecture de la barre de faim, reconnaissance des écrans ouverts. |
+| `calibrate-hunger.js`, `calibrate-screens.js` | Calibrations correspondantes. |
 | `trace.js` | Mode trace des scoreboards RLCraft. |
 
 ## Outils de diagnostic

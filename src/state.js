@@ -31,7 +31,12 @@ export class GameState {
     this.sessionStart = Date.now();
     this.inMenu = false; // menu principal : connexion ouverte, aucun monde charge
     this.cameFromRlcraft = false; // monde quitte pour le menu : une partie RLCraft ?
-    this.paused = false; // menu pause, reconnu a l'ecran (voir pause.js)
+    this.screen = null; // ecran reconnu : 'pause', 'inventory', 'chest', 'trinkets' ou 'lvlup' (screens.js)
+    // Preuves de presence en jeu, independantes des commandes (voir applyPoll).
+    this.lastEventAt = 0;
+    this.lastHudAt = 0;
+    this.commandsUnavailable = false; // en jeu, mais le monde refuse les commandes
+    this.failingSince = null; // debut de la serie de releves ou tout echoue
     // lastMoveAt a maintenant : pas de faux "En pause" juste apres la connexion.
     this.player = { name: null, dimension: null, pos: null, travel: null, underwater: false, lastMoveAt: Date.now() };
     this.world = { day: null, timeOfDay: null, weather: null };
@@ -67,7 +72,7 @@ export class GameState {
     if (this.inMenu) return false;
     this.inMenu = true;
     this.cameFromRlcraft = this.rlcraft !== null; // avant d'oublier le monde quitte
-    this.paused = false;
+    this.screen = null;
     Object.assign(this.player, { dimension: null, pos: null, travel: null, underwater: false });
     this.world = { day: null, timeOfDay: null, weather: null };
     this.players = { count: null, max: null };
@@ -95,6 +100,7 @@ export class GameState {
   applyEvent(name, b) {
     const now = Date.now();
     // Seul un monde charge emet des events.
+    this.lastEventAt = now;
     this.leaveMenu();
     if (b.player) {
       this.player.name = b.player.name ?? this.player.name;
@@ -163,10 +169,30 @@ export class GameState {
     // cheats et meme mort, ces deux-la reussissent toujours.
     const answered = (r) => !r.timeout && !r.disconnected && !r.refused;
     if ([target, time, list].every((r) => answered(r) && r.statusCode < 0)) {
-      this.enterMenu();
+      // Meme reponse dans un monde sans cheats quand la connexion y a ete
+      // rouverte automatiquement (par exemple apres un redemarrage de la
+      // presence) : le jeu y refuse alors toutes les commandes. Un event recent
+      // ou le HUD vu a l'ecran prouvent qu'on est toujours en jeu.
+      // Seule une preuve posterieure au debut des refus compte : en sortant
+      // normalement vers le menu, events et HUD s'arretent en meme temps que
+      // les commandes, et l'on attend alors simplement qu'ils se taisent.
+      const now = Date.now();
+      this.failingSince ??= now;
+      if (this.lastEventAt > this.failingSince || this.lastHudAt > this.failingSince) {
+        this.commandsUnavailable = true;
+        this.leaveMenu(); // corrige un faux « menu » conclu faute de preuve
+        return;
+      }
+      // Monde qui refuse les commandes : leur echec ne dit plus rien du menu.
+      if (this.commandsUnavailable) return;
+      if (now - this.lastEventAt >= 8_000 && now - this.lastHudAt >= 6_000) this.enterMenu();
       return;
     }
-    if ([time, list].some((r) => r.statusCode >= 0)) this.leaveMenu();
+    if ([time, list].some((r) => r.statusCode >= 0)) {
+      this.failingSince = null;
+      this.commandsUnavailable = false;
+      this.leaveMenu();
+    }
 
     if (target.statusCode >= 0 && target.details) {
       try {
@@ -221,7 +247,7 @@ export class GameState {
   /** Deduit l'activite courante, par ordre de priorite. */
   activity(now = Date.now()) {
     if (this.inMenu) return { kind: 'menu' };
-    if (this.paused) return { kind: 'paused' };
+    if (this.screen) return { kind: this.screen === 'pause' ? 'paused' : this.screen };
     this.recent = this.recent.filter((a) => now - a.at < WINDOW_MS);
 
     if (this.lastDeath && now - this.lastDeath.at < 15_000) {

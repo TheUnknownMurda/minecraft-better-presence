@@ -23,6 +23,10 @@ export const STRINGS = {
       swimming: () => '🌊 Swimming',
       idle: () => '💤 Idle',
       paused: () => '⏸️ Game Paused',
+      inventory: () => '🎒 In Inventory',
+      chest: () => '📦 In a Chest',
+      trinkets: () => '💍 In the Trinket Pouch',
+      lvlup: () => '📈 In the LVL UP Menu',
       exploring: (dim) => `🧭 Exploring ${dim}`,
     },
     // Enum ActorDamageCause de Bedrock. Seul 9 (noyade) est confirme en jeu.
@@ -74,6 +78,10 @@ export const STRINGS = {
       swimming: () => '🌊 Nage',
       idle: () => '💤 Inactif',
       paused: () => '⏸️ En pause',
+      inventory: () => "🎒 Dans l'inventaire",
+      chest: () => '📦 Dans un coffre',
+      trinkets: () => '💍 Dans la poche à trinkets',
+      lvlup: () => '📈 Dans le menu LVL UP',
       exploring: (dim) => `🧭 Explore ${dim}`,
     },
     deaths: {

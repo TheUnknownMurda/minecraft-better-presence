@@ -13,7 +13,7 @@
     "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/shortcut.ps1",
     "shortcut:remove": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/shortcut.ps1 -Remove",
     "calibrate": "node src/calibrate-hunger.js",
-    "calibrate-pause": "node src/calibrate-pause.js",
+    "calibrate-screens": "node src/calibrate-screens.js",
     "probe": "node --env-file-if-exists=.env src/probe.js",
     "rpc": "node --env-file-if-exists=.env src/rpc-test.js"
   },

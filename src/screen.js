@@ -45,8 +45,8 @@ while ($true) {
   try {
     if ($a[0] -eq 'window') { $r = [Mbp]::Window() }
     elseif ($a[0] -eq 'grab') { $r = [Mbp]::Grab([int]$a[1], [int]$a[2], [int]$a[3], [int]$a[4]) }
-    else { $r = 'ERR commande inconnue' }
-  } catch { $r = 'ERR ' + ($_.Exception.Message -replace '\s+', ' ') }
+    else { $r = '!commande inconnue' }
+  } catch { $r = '!' + ($_.Exception.Message -replace '\s+', ' ') }
   [Console]::Out.WriteLine($r); [Console]::Out.Flush()
 }
 `;
@@ -70,7 +70,7 @@ export class ScreenReader {
     });
     this.#proc.on('exit', () => {
       signalReady(false);
-      for (const resolve of this.#waiting.splice(0)) resolve('ERR processus de capture arrete');
+      for (const resolve of this.#waiting.splice(0)) resolve('!processus de capture arrete');
       this.#proc = null;
     });
     return this;
@@ -86,7 +86,9 @@ export class ScreenReader {
       this.#waiting.push(resolve);
       this.#proc.stdin.write(`${command}\n`);
     });
-    if (line.startsWith('ERR')) throw new Error(line.slice(4));
+    // Erreurs prefixees par « ! », absent de l'alphabet base64 des captures : un
+    // prefixe « ERR » etait pris a tort sur une image dont le base64 commencait ainsi.
+    if (line.startsWith('!')) throw new Error(line.slice(1));
     return line;
   }
 

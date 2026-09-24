@@ -123,10 +123,13 @@ export class MinecraftBridge extends EventEmitter {
     else this.#ready(from);
   }
 
-  /** Abonnements, puis annonce de la connexion : les commandes peuvent partir. */
-  #ready(from) {
+  /**
+   * Abonnements, puis annonce de la connexion : les commandes peuvent partir.
+   * `refusal` : message du jeu si le chiffrement a ete refuse.
+   */
+  #ready(from, refusal = null) {
     for (const eventName of SUBSCRIBED_EVENTS) this.#send('subscribe', { eventName });
-    this.emit('connected', from, Boolean(this.#cipher));
+    this.emit('connected', from, Boolean(this.#cipher), refusal);
   }
 
   #handshake(from) {
@@ -153,7 +156,7 @@ export class MinecraftBridge extends EventEmitter {
       // chiffrement, c'est lui qui fermera la connexion.
       const why = res.timeout ? 'pas de reponse' : (res.statusMessage ?? res.statusCode);
       this.emit('warning', `chiffrement refuse par le client (${why}), connexion en clair`);
-      this.#ready(from);
+      this.#ready(from, String(why));
       return;
     }
 

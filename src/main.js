@@ -9,7 +9,7 @@ import { setLanguage } from './names.js';
 import { createTracer } from './trace.js';
 import { findLevel } from './level.js';
 import { readHunger } from './hunger.js';
-import { isPaused, patchScore } from './pause.js';
+import { recognize } from './screens.js';
 import { levelRegion, readLevelText } from './levelocr.js';
 import { ScreenReader } from './screen.js';
 
@@ -60,8 +60,13 @@ async function pollFast() {
   commands.forEach((c, i) => noteFailure(c, results[i]));
   const [target, time, day, weather, monsters, list] = results;
   const wasInMenu = state.inMenu;
+  const wasUnavailable = state.commandsUnavailable;
   state.applyPoll({ target, time, day, weather, monsters, list });
   onMenuChange(wasInMenu);
+  if (state.commandsUnavailable && !wasUnavailable) {
+    log('\x1b[33mAttention\x1b[0m : ce monde refuse les commandes (connexion rouverte hors d\'un monde avec cheats). '
+      + 'Soif, jour, meteo et joueurs sont indisponibles : refais /connect depuis un monde avec cheats.');
+  }
 }
 
 /** Journalise les passages menu <-> monde ; a l'entree d'un monde, tout relire sans attendre. */
@@ -92,10 +97,18 @@ async function pollSlow() {
 
 let receiving = false;
 
-bridge.on('connected', (from, encrypted) => {
+bridge.on('connected', (from, encrypted, refusal) => {
   state.reset();
   receiving = false;
   log(`\x1b[32mMinecraft connecte\x1b[0m (${from}, ${encrypted ? 'chiffre' : 'en clair'})`);
+  // Chiffrement refuse « faute de cheats dans ce monde » : un monde est charge,
+  // et il refusera toutes les commandes (connexion rouverte automatiquement
+  // hors d'un monde avec cheats). Message du jeu, donc selon sa langue.
+  if (/triche|cheat/i.test(refusal ?? '')) {
+    state.commandsUnavailable = true;
+    log('\x1b[33mAttention\x1b[0m : ce monde refuse les commandes (connexion rouverte hors d\'un monde avec cheats). '
+      + 'Soif, jour, meteo et joueurs sont indisponibles : refais /connect depuis un monde avec cheats.');
+  }
   pollFast();
   pollSlow();
 });
@@ -126,9 +139,9 @@ discord.on('sent', (a) => {
   if (a) log(`\x1b[36m->\x1b[0m ${a.details}  \x1b[90m|\x1b[0m ${a.state}`);
 });
 
-// Lecture de l'ecran (faim et menu pause), seulement quand Minecraft est au
+// Lecture de l'ecran (faim, niveau, pause, inventaire, coffre), seulement quand Minecraft est au
 // premier plan ; sinon on garde les dernieres valeurs. Necessite hud.json
-// (`npm run calibrate`, puis `npm run calibrate-pause`).
+// (`npm run calibrate`, puis `npm run calibrate-screens`).
 const hud = loadHud();
 let screen = null;
 let screenBusy = false;
@@ -137,13 +150,21 @@ let screenWarned = null;
 function loadHud() {
   try {
     const h = JSON.parse(readFileSync(new URL('../hud.json', import.meta.url), 'utf8'));
-    if (!h.pause) log('Pause : pas de calibration, lance `npm run calibrate-pause` pour l\'afficher');
+    // Ancien format : signature du seul menu pause (avant calibrate-screens).
+    h.screens ??= h.pause ? { pause: h.pause } : null;
+    if (!h.screens) log('Ecrans : pas de calibration, lance `npm run calibrate-screens` pour les afficher');
     return h;
   } catch {
-    log('Faim et pause : pas de calibration, lance `npm run calibrate` pour les afficher');
+    log('Faim et ecrans : pas de calibration, lance `npm run calibrate` pour les afficher');
     return null;
   }
 }
+
+const SCREEN_LOG = {
+  pause: 'Menu pause', inventory: 'Inventaire', chest: 'Coffre', trinkets: 'Poche a trinkets', lvlup: 'Menu LVL UP',
+};
+// Signatures calibrees a part, mais affichees comme un autre ecran.
+const SCREEN_AS = { largeChest: 'chest' };
 
 function warnScreenOnce(reason) {
   if (screenWarned === reason) return;
@@ -152,7 +173,8 @@ function warnScreenOnce(reason) {
 }
 
 async function pollScreen() {
-  if (!hud || !bridge.connected || screenBusy || state.inMenu) return;
+  // Tourne aussi au menu : un HUD visible y prouverait qu'on est en jeu.
+  if (!hud || !bridge.connected || screenBusy) return;
   screenBusy = true;
   try {
     if (!screen?.alive) screen = new ScreenReader().start();
@@ -163,23 +185,33 @@ async function pollScreen() {
       return;
     }
 
-    if (hud.pause) {
-      const scores = [];
-      for (const p of hud.pause.patches) {
-        scores.push(patchScore(await screen.grab(win.x + p.x, win.y + p.y, p.w, p.h), p));
-      }
-      const paused = isPaused(scores) && !state.inMenu;
-      if (paused !== state.paused) log(paused ? 'Menu pause' : 'Reprise du jeu');
-      state.paused = paused;
-      if (paused) return; // la barre de faim est masquee par le menu
-    }
-
     const g = hud.hunger;
     // Marge d'une case au-dessus et en dessous pour le tremblement des icones.
     const img = await screen.grab(win.x + g.x, win.y + g.y - g.cell, 9 * g.period + 9 * g.cell, 11 * g.cell);
     const points = readHunger(img, { x: 0, y: g.cell, cell: g.cell, period: g.period });
-    // Le joueur a pu quitter le monde pendant la capture.
-    if (points === null || state.inMenu) return;
+    if (state.inMenu) {
+      if (points !== null) state.lastHudAt = Date.now(); // faux menu : applyPoll le corrigera
+      return;
+    }
+
+    // Barre de faim masquee : un ecran recouvre le HUD (pause, inventaire,
+    // coffre, ou un autre non calibre). Visible : en jeu, ou dans un menu
+    // dessine par-dessus le jeu (menu LVL UP).
+    let shown = null;
+    if (hud.screens) {
+      const overlay = points !== null;
+      const pool = Object.fromEntries(Object.entries(hud.screens).filter(([, s]) => !!s.overlay === overlay));
+      shown = await recognize(pool, (p) => screen.grab(win.x + p.x, win.y + p.y, p.w, p.h));
+      shown = SCREEN_AS[shown] ?? shown;
+    }
+    if (state.inMenu) return; // le joueur a pu quitter le monde pendant les captures
+    // HUD ou ecran de jeu visible : preuve que l'on est en jeu (voir applyPoll).
+    if (points !== null || shown) state.lastHudAt = Date.now();
+    if (shown !== state.screen) {
+      log(shown ? SCREEN_LOG[shown] ?? shown : points === null ? 'Autre ecran (non reconnu)' : 'Retour en jeu');
+    }
+    state.screen = shown;
+    if (points === null) return;
     state.hunger = points;
 
     // HUD visible : le niveau d'XP y est lisible. Indispensable sans cheats,

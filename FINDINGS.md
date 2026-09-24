@@ -71,24 +71,72 @@ simples passent (`querytarget @s`, `time query`, `weather query`, `list`,
 `<insufficient permissions for selector expansion>`. Les monstres proches sont
 donc indisponibles sans cheats ; le niveau d'XP y est lu à l'écran (voir plus bas).
 
-### Menu pause (`src/pause.js`, `npm run calibrate-pause`)
+### Écrans ouverts (`src/screens.js`, `npm run calibrate-screens`)
 
-Aucun signal côté jeu. Reconnaissance à l'écran par signature apprise :
-pixels stables entre deux captures en pause et absents en jeu. Le menu pause
-RLCraft (capture du 2026-09-23) : voile sombre sur la moitié gauche, logo
-« MINECRAFT RLCraft 1.3 », boutons gris « Reprendre le jeu », « Paramètres »,
-etc., et l'étiquette « Le jeu est en pause » en haut à droite.
+Aucun signal côté jeu. Reconnaissance à l'écran par signature apprise. Le
+menu pause RLCraft (capture du 2026-09-23) : voile sombre sur la moitié gauche,
+logo « MINECRAFT RLCraft 1.3 », boutons gris « Reprendre le jeu »,
+« Paramètres », etc., et l'étiquette « Le jeu est en pause » en haut à droite.
 
+**Menu pause seul (2026-09-23).**
 - 1ʳᵉ version : zones les plus riches en pixels clairs. Résultat : trois aplats
   de bouton `#C6C6C6`, le gris commun à l'inventaire et aux coffres.
-- Version retenue : zones composées d'au moins 30 % de bouton ou panneau, et
-  choisies pour leur texte (pixels foncés encadrés par du clair sur leur
-  ligne), avec 40 points de texte et 40 de fond par zone. Sur ce menu, la
-  calibration a retenu le logo. Un panneau gris sans ce texte plafonne à 50 %.
-- Validé en jeu sur 4 minutes (inventaire, coffre, LVL UP, chat, pause) : les
-  pauses sont reconnues avec des zones à 81-100 %, les autres écrans ne dépassent
-  pas 56 % sur plus d'une zone, et Discord a affiché « ⏸️ Game Paused » à chaque
-  pause, puis la reprise.
+- Version validée : zones d'au moins 30 % de bouton ou panneau, choisies pour
+  leur texte. La calibration a retenu le logo. Validé en jeu sur 4 minutes.
+
+**Pause, inventaire, coffres (2026-09-24).** Chaque écran est ouvert deux fois ;
+un pixel de signature doit être stable, identique aux deux ouvertures, gris,
+et différent (écart ≥ 45) du jeu et de tous les autres écrans calibrés.
+- Signatures posées sur le ciel ou le monde assombri (`#21242B`) autour du
+  menu, identiques aux deux ouvertures : pause jamais reconnue, coffre 2 s.
+  Correctif : seulement dans les boîtes englobantes des grands aplats
+  `#C6C6C6` (panneaux, boutons ; `uiMask`).
+- En plein écran, le joueur ne voit pas les consignes du terminal : il a ouvert
+  un tonneau, l'écran Trinkets, puis l'inventaire au lieu de la pause.
+  Correctifs : bips à chaque étape et contrôles immédiats.
+- L'inventaire et le coffre simple ont un panneau de même taille au même
+  endroit (boîtes englobantes : recouvrement 1,00). Ressemblance des gris
+  pixel par pixel : 1,00 pour deux ouvertures du même écran, 0,69 inventaire /
+  coffre, 0,35 au plus pour les autres paires. Seuil retenu : 0,8.
+- Les zones retenues tombaient sur l'inventaire du joueur (barre rapide,
+  armure, personnage), identique aux deux ouvertures. Correctif : seulement la
+  structure, à 4 px au plus d'un pixel `#C6C6C6` (fond, bordures des cases,
+  textes). Les objets sont dessinés à l'intérieur des cases, à 5 px au moins
+  du fond en 4K.
+- `#C6C6C6` (fond) et `#8B8B8B` (intérieur de case) diffèrent de 59 : l'ancien
+  seuil de 60 écartait presque tous les pixels qui distinguent l'inventaire du
+  coffre (une seule zone chacun). Seuil abaissé à 45, soit plus du double de la
+  tolérance de reconnaissance (20) : 3 zones par écran.
+- Vérifié hors ligne : une signature de coffre apprise sur un seul coffre
+  reconnaît l'autre coffre à 100/100/99 %.
+- En direct, une table de craft passait pour l'inventaire (zones à 80, 78 et
+  100 %) : seuil par zone relevé de 80 à 90 %. Les vrais écrans restent à
+  96-100 %, sauf une zone masquée par la souris ou une infobulle.
+- Grand coffre : signature à part, affichée comme un coffre. Tonneau : même
+  disposition que le coffre simple, hormis le titre (non vérifié).
+
+**Poche à trinkets et menu LVL UP (2026-09-24).**
+- Poche à trinkets : vrai écran (HUD masqué), bannière « TRINKETS » brune et
+  panneau « Inventaire » gris. Même méthode ; zones sur « Inventaire », le
+  bouton « × » et le bord du panneau.
+- Menu LVL UP : le **HUD reste visible**, et les coordonnées passent à y = 250
+  (le joueur est déplacé dans le ciel). Pas de panneau gris : colonnes à
+  piliers, bannières avec le niveau de chaque compétence, « POWER LEVEL », et
+  un texte d'aide en bas à droite. Calibration minutée (bip double, capture
+  7 s plus tard), reconnaissance quand la barre de faim est visible.
+- 1ʳᵉ signature : les trois zones dans la colonne sélectionnée, sur le niveau
+  « 14 », le cadre jaune de sélection et la capacité sélectionnée. Tout cela
+  change en naviguant ou en améliorant.
+- Version retenue : fond exclu (couleur des bords gauche et droit de chaque
+  ligne, le ciel), gris seulement, et seuls comptent les contours à 4 px au
+  plus du fond. Les chiffres et la sélection, dessinés dans les bannières, en
+  sont exclus. Zones retenues : « change Skill Category », « Crouch/Jump to »,
+  « Switch Item to close ».
+- Hors ligne, les 6 signatures sur 14 captures (dont 2 en jeu) : chaque écran
+  n'est reconnu que par la sienne. Meilleure zone isolée d'un autre écran :
+  80 %, sous le seuil, et il en faut deux.
+- Validé en jeu (monde sans cheats) : Discord a affiché « 📈 In the LVL UP
+  Menu » et « 💍 In the Trinket Pouch ».
 
 ### Niveau d'XP lu à l'écran (`src/levelocr.js`)
 
