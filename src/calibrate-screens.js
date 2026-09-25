@@ -7,9 +7,13 @@
 // Pour n'apprendre que certains ecrans et garder les autres :
 //   npm run calibrate-screens -- trinkets lvlup
 //
+// npm run calibrate-menus (--menus) : ecrans du menu principal (Jouer et ses
+// onglets, Parametres, Marche, Vestiaire), ouverts depuis l'ecran titre.
+//
 // En plein ecran, le joueur ne voit pas ce terminal : chaque etape se signale
 // par un bip. Aigu = capture faite, ferme l'ecran ; grave = recommence l'ecran
-// en cours (ses deux ouvertures) ; double = ouvre maintenant le menu LVL UP ;
+// en cours (ses deux ouvertures) ; double = ouvre maintenant l'ecran demande
+// (menu LVL UP, ecrans du menu principal) ;
 // trois notes montantes = termine.
 import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -21,7 +25,8 @@ const HUD_FILE = new URL('../hud.json', import.meta.url);
 // Chaque ecran est ouvert deux fois : seul ce qui est identique les deux fois
 // entre dans la signature. Les boutons survoles par la souris et le contenu
 // des coffres sont ainsi exclus. `overlay` : menu dessine par-dessus le jeu,
-// HUD visible, dont l'ouverture ne se voit pas a la barre de faim.
+// HUD visible, dont l'ouverture ne se voit pas a la barre de faim. `menu` :
+// ecran du menu principal, reconnu a son en-tete (voir buildSignature).
 const SCREENS = [
   { name: 'pause', label: 'le MENU PAUSE (Echap)', again: 'rouvre le MENU PAUSE' },
   { name: 'inventory', label: 'ton INVENTAIRE', again: 'rouvre ton INVENTAIRE' },
@@ -29,8 +34,21 @@ const SCREENS = [
   { name: 'largeChest', label: 'un GRAND COFFRE', again: 'ouvre un AUTRE GRAND COFFRE, au contenu different' },
   { name: 'trinkets', label: 'ta POCHE A TRINKETS', again: 'rouvre ta POCHE A TRINKETS' },
   { name: 'lvlup', label: 'le menu LVL UP', again: 'rouvre le menu LVL UP', overlay: true },
+  // Menu principal. `band` : hauteur de l'en-tete retenu (part de l'ecran) :
+  // barre de titre et onglets pour Jouer, barre de titre seule ailleurs (en
+  // dessous, le contenu change : texte d'une categorie de Parametres, offres
+  // du Marche). Jouer se rouvre sur le dernier onglet utilise, il faut cliquer
+  // le bon ; `wait` laisse sa liste de mondes finir de charger, son compteur
+  // « Mondes (N) » change pendant ce temps.
+  { name: 'menuWorlds', label: 'JOUER puis clique l\'onglet MONDES', again: 'rouvre JOUER, onglet MONDES', menu: true, band: 0.13, wait: 12000 },
+  { name: 'menuRealms', label: 'JOUER puis clique l\'onglet REALMS', again: 'rouvre JOUER, onglet REALMS', menu: true, band: 0.13, wait: 12000 },
+  { name: 'menuServers', label: 'JOUER puis clique l\'onglet SERVEURS', again: 'rouvre JOUER, onglet SERVEURS', menu: true, band: 0.13, wait: 12000 },
+  { name: 'menuSettings', label: 'les PARAMETRES', again: 'rouvre les PARAMETRES', menu: true, band: 0.06 },
+  { name: 'marketplace', label: 'le MARCHE', again: 'rouvre le MARCHE', menu: true, band: 0.06 },
+  { name: 'dressingRoom', label: 'le VESTIAIRE', again: 'rouvre le VESTIAIRE', menu: true, band: 0.06 },
 ];
 const ATTEMPTS = 3; // essais par ecran
+const START_WAIT = 300; // s pour revenir au jeu au lancement, le temps de lire les consignes
 // Ressemblance minimale de deux ouvertures du meme ecran (voir similarity) :
 // 1 pour le meme ecran, un peu moins pour deux coffres au contenu different,
 // 0,7 environ entre l'inventaire et un coffre.
@@ -38,6 +56,13 @@ const SAME_SCREEN = 0.8;
 const OVERLAY_DELAY = 7000; // ms laissees pour ouvrir un menu superpose apres le bip double
 const OVERLAY_CHANGE = 0.3; // part minimale du centre de l'ecran qui change a son ouverture
 const OVERLAY_SAME = 0.6; // ressemblance minimale de deux ouvertures d'un menu superpose, hors fond
+// En-tete des ecrans du menu principal : titre et onglets, sans les bords ou le
+// decor anime reste visible. Mesure sur Jouer : 0,996 entre deux ouvertures du
+// meme onglet, 0,69 a 0,70 entre deux onglets.
+const MENU_BAND = { left: 0.1, right: 0.9, top: 0.15 };
+const MENU_BAR = 0.5; // part claire minimale du haut de l'ecran : la barre de titre (0,98 sur Jouer, 0,74 sur le Marche, 0,07 sur l'ecran titre)
+const MENU_SAME = 0.9; // ressemblance minimale de deux ouvertures du meme ecran
+const MENU_DISTINCT = 0.95; // au-dela, c'est l'ecran d'une etape precedente
 
 const BEEP_OK = [[1200, 150]];
 const BEEP_RETRY = [[300, 700]];
@@ -110,6 +135,21 @@ function alikeIn(a, b, region, skip = null) {
   return counted ? same / counted : 0;
 }
 
+/** Part des pixels clairs et gris dans le haut (5 %) d'une capture : la barre de titre des ecrans du menu. */
+function titleBar(img) {
+  let counted = 0;
+  let light = 0;
+  for (let y = 0; y < Math.round(img.h * 0.05); y += 2) {
+    for (let x = 0; x < img.w; x += 2) {
+      const i = (y * img.w + x) * 4;
+      const [b, g, r] = [img.data[i], img.data[i + 1], img.data[i + 2]];
+      counted++;
+      if (0.299 * r + 0.587 * g + 0.114 * b >= 180 && Math.max(r, g, b) - Math.min(r, g, b) <= 24) light++;
+    }
+  }
+  return light / counted;
+}
+
 /** Recadre une zone d'une capture plein ecran. */
 function crop(img, p) {
   const out = { w: p.w, h: p.h, data: Buffer.alloc(p.w * p.h * 4) };
@@ -124,16 +164,21 @@ try {
   } catch {
     throw new Error('lance d\'abord `npm run calibrate` (calibration de la faim)');
   }
-  const wanted = process.argv.slice(2);
-  const unknown = wanted.filter((n) => !SCREENS.some((s) => s.name === n));
+  const MENUS = process.argv.includes('--menus');
+  const group = SCREENS.filter((s) => !!s.menu === MENUS);
+  const wanted = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+  const unknown = wanted.filter((n) => !group.some((s) => s.name === n));
   if (unknown.length) {
-    throw new Error(`ecran inconnu : ${unknown.join(', ')} (au choix : ${SCREENS.map((s) => s.name).join(', ')})`);
+    throw new Error(`ecran inconnu : ${unknown.join(', ')} (au choix : ${group.map((s) => s.name).join(', ')})`);
   }
-  const run = wanted.length ? SCREENS.filter((s) => wanted.includes(s.name)) : SCREENS;
+  const run = wanted.length ? group.filter((s) => wanted.includes(s.name)) : group;
   const g = hud.hunger;
   const inGameNow = (w) => hungerVisible(w, g);
+  const atMenuNow = async (w) => !(await hungerVisible(w, g));
 
-  const win = await waitFor(inGameNow, 60, 'Reviens dans Minecraft, en jeu, sans aucun menu ouvert...');
+  const win = MENUS
+    ? await waitFor(atMenuNow, START_WAIT, 'Va sur l\'ecran titre du menu principal, sans rien ouvrir...')
+    : await waitFor(inGameNow, START_WAIT, 'Reviens dans Minecraft, en jeu, sans aucun menu ouvert...');
   if (win.w !== hud.window.w || win.h !== hud.window.h) {
     throw new Error('la fenetre a change de taille : relance d\'abord `npm run calibrate`');
   }
@@ -143,10 +188,21 @@ try {
     x0: Math.round(win.w * 0.15), x1: Math.round(win.w * 0.85),
     y0: Math.round(win.h * 0.2), y1: g.y - 40 * g.cell,
   };
-  await sleep(500);
-  const inGame = await grabFull(win);
-  debugSave(inGame, 'en-jeu');
-  console.log('Capture en jeu faite.');
+  // Comparaisons d'ecrans du menu : bande centrale, sans le decor anime des bords.
+  const menuRegion = {
+    x0: Math.round(win.w * MENU_BAND.left), x1: Math.round(win.w * MENU_BAND.right),
+    y0: 0, y1: Math.round(win.h * MENU_BAND.top),
+  };
+  // Leurs signatures : toute la largeur, sur la hauteur de l'en-tete de chaque
+  // ecran. Le titre du Marche et du Vestiaire est colle a gauche ; le decor
+  // anime, lui, change d'une ouverture a l'autre et n'entre donc pas dans la
+  // signature.
+  const menuSignatureRegion = (s) => ({ x0: 0, x1: win.w, y0: 0, y1: Math.round(win.h * s.band) });
+  // Reference : le jeu sans menu, ou l'ecran titre pour les ecrans du menu principal.
+  await sleep(MENUS ? 2000 : 500);
+  const reference = await grabFull(win);
+  debugSave(reference, MENUS ? 'ecran-titre' : 'en-jeu');
+  console.log(MENUS ? 'Capture de l\'ecran titre faite.' : 'Capture en jeu faite.');
   await beep(BEEP_OK);
 
   /** Deux captures d'un ecran ouvert (barre de faim masquee), a une seconde d'intervalle. */
@@ -179,26 +235,47 @@ try {
     return { a, b };
   }
 
-  /** Attend la fermeture d'un menu superpose : le centre de l'ecran change nettement. */
-  async function overlayClosed(open, prefix) {
-    await waitFor(async (x) => 1 - alikeIn(open, await grabFull(x), region) >= OVERLAY_CHANGE, 90,
-      `${prefix} : ferme le menu et reviens en jeu...`);
+  /** Ecran du menu principal : ouvert au bip double depuis l'ecran titre, capture quelques secondes apres. */
+  async function captureMenu(prompt, name, wait = OVERLAY_DELAY) {
+    const w = await waitFor(atMenuNow, 90, 'Reviens au menu principal...');
+    console.log(`${prompt} (au bip double, tu as ${wait / 1000} secondes, puis souris en bas de l'ecran)`);
+    await beep(BEEP_GO);
+    await sleep(wait);
+    const a = await grabFull(w);
+    await sleep(1000);
+    const b = await grabFull(w);
+    debugSave(a, `${name}a`);
+    debugSave(b, `${name}b`);
+    // Les ecrans du menu ont une barre de titre claire en haut ; l'ecran titre, non.
+    const bar = titleBar(a);
+    if (bar < MENU_BAR) throw new Retry(`pas de barre de titre en haut de l'ecran (${bar.toFixed(2)}) : rien ne s'est ouvert a temps`);
+    return { a, b };
   }
+
+  /** Attend qu'un ecran sans barre de faim a surveiller soit quitte : sa zone change nettement. */
+  async function screenLeft(open, zone, message) {
+    await waitFor(async (x) => 1 - alikeIn(open, await grabFull(x), zone) >= OVERLAY_CHANGE, 90, message);
+  }
+  const unstable = (c) => stableMask(c.a, c.b).map((v) => 1 - v);
 
   const captured = {};
   for (const [index, s] of run.entries()) {
     const prefix = `Ecran ${index + 1}/${run.length}`;
-    const capture = s.overlay ? captureOverlay : captureOpen;
-    const closed = s.overlay
-      ? (open) => overlayClosed(open, prefix)
-      : () => waitFor(inGameNow, 90, `${prefix} : ferme-le et reviens en jeu...`);
+    const capture = s.menu ? (prompt, name) => captureMenu(prompt, name, s.wait) : s.overlay ? captureOverlay : captureOpen;
+    const closed = s.menu ? (open) => screenLeft(open, menuRegion, `${prefix} : reviens a l'ecran titre...`)
+      : s.overlay ? (open) => screenLeft(open, region, `${prefix} : ferme le menu et reviens en jeu...`)
+        : () => waitFor(inGameNow, 90, `${prefix} : ferme-le et reviens en jeu...`);
     for (let attempt = 1; ; attempt++) {
       let open = null;
       try {
         const first = await capture(`${prefix}, ouverture 1/2 : ouvre ${s.label}, souris hors des cases et des boutons, et attends le bip...`,
           `${s.name}-1`);
         open = first.a;
-        if (!s.overlay) {
+        if (s.menu) {
+          for (const [other, c] of Object.entries(captured)) {
+            if (alikeIn(first.a, c.img, menuRegion, unstable(first)) >= MENU_DISTINCT) throw new Retry(`c'est le meme ecran que « ${other} »`);
+          }
+        } else if (!s.overlay) {
           if (!uiMask(first.a).includes(1)) throw new Retry('aucun panneau gris d\'interface a l\'ecran');
           for (const [other, c] of Object.entries(captured)) {
             if (!c.overlay && similarity(first.a, c.img) >= SAME_SCREEN) throw new Retry(`c'est le meme ecran que « ${other} »`);
@@ -210,8 +287,9 @@ try {
         const second = await capture(`${prefix}, ouverture 2/2 : ${s.again}, souris hors des cases et des boutons, et attends le bip...`,
           `${s.name}-2`);
         open = second.a;
-        const alike = s.overlay ? alikeIn(first.a, second.a, region, backdropMask(first.a)) : similarity(first.a, second.a);
-        if (alike < (s.overlay ? OVERLAY_SAME : SAME_SCREEN)) {
+        const alike = s.menu ? alikeIn(first.a, second.a, menuRegion, unstable(first))
+          : s.overlay ? alikeIn(first.a, second.a, region, backdropMask(first.a)) : similarity(first.a, second.a);
+        if (alike < (s.menu ? MENU_SAME : s.overlay ? OVERLAY_SAME : SAME_SCREEN)) {
           throw new Retry(`les deux ouvertures ne montrent pas le meme ecran (ressemblance ${alike.toFixed(2)})`);
         }
         // Signature = ce qui est stable dans chaque ouverture ET identique entre les deux.
@@ -219,7 +297,7 @@ try {
         const stable2 = stableMask(second.a, second.b);
         const same = stableMask(first.a, second.a);
         for (let i = 0; i < stable.length; i++) stable[i] &= stable2[i] & same[i];
-        captured[s.name] = { img: first.a, stable, overlay: !!s.overlay };
+        captured[s.name] = { img: first.a, img2: second.a, stable, overlay: !!s.overlay, menu: !!s.menu };
         console.log(`${prefix} : captures faites (ressemblance ${alike.toFixed(2)}).`);
         await beep(BEEP_OK);
         await closed(second.a);
@@ -229,36 +307,40 @@ try {
         if (attempt === ATTEMPTS) throw new Error(`${s.label} : ${e.message} (${ATTEMPTS} essais)`);
         console.log(`${prefix} : ${e.message}. Recommence cet ecran depuis sa premiere ouverture.`);
         await beep(BEEP_RETRY);
-        if (!s.overlay) await waitFor(inGameNow, 90, `${prefix} : ferme-le et reviens en jeu...`);
-        else if (open) await overlayClosed(open, prefix);
+        if (!s.menu && !s.overlay) await closed();
+        else if (open) await closed(open);
       }
     }
   }
 
   const signatures = {};
   for (const s of run) {
-    const others = run.filter((o) => o.name !== s.name).map((o) => captured[o.name].img);
-    const sig = buildSignature(captured[s.name], others, inGame, { overlay: !!s.overlay, region });
+    // Les deux ouvertures des autres ecrans : un element qui a varie chez eux
+    // (compteur « Mondes (N) » en cours de chargement...) n'est pas distinctif.
+    const others = run.filter((o) => o.name !== s.name).flatMap((o) => [captured[o.name].img, captured[o.name].img2]);
+    const sig = buildSignature(captured[s.name], others, reference,
+      { overlay: !!s.overlay, menu: !!s.menu, region: s.menu ? menuSignatureRegion(s) : region });
     if (!sig) throw new Error(`aucun element propre a ${s.label} : recommence en ouvrant bien les bons ecrans`);
     signatures[s.name] = sig;
   }
-  // Calibration partielle : les ecrans non recalibres gardent leur signature.
+  // Les ecrans non recalibres (autre groupe, ou calibration partielle) gardent leur signature.
   const all = {};
   for (const s of SCREENS) {
-    const sig = signatures[s.name] ?? (wanted.length ? hud.screens?.[s.name] : null);
+    const sig = signatures[s.name] ?? (run.includes(s) ? null : hud.screens?.[s.name]);
     if (sig) all[s.name] = sig;
   }
 
   // Controle croise : chaque signature doit reconnaitre son ecran, et lui seul.
   console.log('\nControle croise (zones reconnues a 90 % ou plus) :');
   let confusion = false;
-  for (const shown of [...run.map((s) => s.name), 'en jeu']) {
-    const img = shown === 'en jeu' ? inGame : captured[shown].img;
+  const referenceName = MENUS ? 'ecran titre' : 'en jeu';
+  for (const shown of [...run.map((s) => s.name), referenceName]) {
+    const img = shown === referenceName ? reference : captured[shown].img;
     const hits = Object.keys(all).filter((sig) => matches(all[sig].patches.map((p) => patchScore(crop(img, p), p))));
-    const expected = shown === 'en jeu' ? [] : [shown];
+    const expected = shown === referenceName ? [] : [shown];
     const ok = JSON.stringify(hits) === JSON.stringify(expected);
     if (!ok) confusion = true;
-    console.log(`  ${ok ? 'OK    ' : 'ERREUR'} ${shown.padEnd(10)} -> ${hits.join(', ') || 'aucun'}`);
+    console.log(`  ${ok ? 'OK    ' : 'ERREUR'} ${shown.padEnd(12)} -> ${hits.join(', ') || 'aucun'}`);
   }
   if (confusion) throw new Error('les signatures se confondent : recommence la calibration');
 

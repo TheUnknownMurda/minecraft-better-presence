@@ -19,9 +19,11 @@ dans [FINDINGS.md](FINDINGS.md).
   (*Hunting: Boar*), minage, construction, craft, cuisson, nage, monture,
   exploration, inactivité, mort avec sa cause (*Drowned*).
 - **Ligne 2** : nombre de joueurs dans la partie (`👥 1/8`), soif (RLCraft),
-  faim, niveau d'XP, jour, jour ou nuit, météo et monstres proches.
-- **Grande image** : la dimension (Overworld, Nether, End). Au survol : le lieu
-  et les stats de la session (blocs, kills, morts).
+  faim, niveau d'XP, jour, jour ou nuit, météo et monstres proches (sans
+  cheats, « ⚔️ Taking damage » à la place, quand tu perds de la vie).
+- **Grande image** : la dimension (Overworld, Nether, End), ou l'image de ton
+  choix pour une partie RLCraft (`RLCRAFT_IMAGE`). Au survol : le lieu et les
+  stats de la session (blocs, kills, morts).
 - **Petite image** : l'activité. Au survol, sur RLCraft : compétences, set
   d'armure et titre de tueur de dragons.
 - **Chronomètre** de session.
@@ -29,7 +31,9 @@ dans [FINDINGS.md](FINDINGS.md).
   1.3 » en deuxième ligne quand on sort d'une partie RLCraft), et les écrans
   ouverts : « ⏸️ Game Paused », « 🎒 In Inventory », « 📦 In a Chest » (coffre
   simple ou grand coffre) et, sur RLCraft, « 💍 In the Trinket Pouch » et
-  « 📈 In the LVL UP Menu ».
+  « 📈 In the LVL UP Menu ». Au menu principal, l'écran ouvert : « 🌍 Choosing
+  a World », « 🏰 Browsing Realms », « 🌐 Browsing Servers », « ⚙️ In
+  Settings », « 🛒 In the Marketplace », « 👕 In the Dressing Room ».
 
 Les noms viennent du fichier de langue officiel du jeu installé, et sont
 affichés en anglais ou en français au choix.
@@ -72,7 +76,8 @@ Discord **desktop** (la version web ne suffit pas) et Minecraft Bedrock.
    bureau et dans le menu Démarrer, d'où tu peux l'épingler à la barre des tâches.
 
 5. **Faim et écrans** (facultatif) : en jeu, lance `npm run calibrate`, puis
-   `npm run calibrate-screens`, et laisse-toi guider. Voir
+   `npm run calibrate-screens` ; depuis l'écran titre, `npm run
+   calibrate-menus`. Laisse-toi guider. Voir
    [Lecture de l'écran](#lecture-de-lécran-faim-et-écrans).
 
 ## Utilisation au quotidien
@@ -101,7 +106,8 @@ presence ne démarre pas. Utilise alors `npm run bg`, puis `npm run stop`.
 | `npm run bg` / `npm run stop` | Presence en arrière-plan sans lien avec le jeu / arrêt. |
 | `npm run shortcut` / `shortcut:remove` | Crée ou supprime les raccourcis. |
 | `npm run calibrate` | Repère la barre de faim à l'écran. |
-| `npm run calibrate-screens` | Apprend à reconnaître les écrans (après `calibrate`). `-- trinkets lvlup` : seulement ceux-là. |
+| `npm run calibrate-screens` | Apprend à reconnaître les écrans de jeu (après `calibrate`). `-- trinkets lvlup` : seulement ceux-là. |
+| `npm run calibrate-menus` | Apprend à reconnaître les écrans du menu principal, depuis l'écran titre. `-- menuSettings` : seulement celui-là. |
 | `npm run probe` / `npm run rpc` | Outils de diagnostic, voir [plus bas](#outils-de-diagnostic). |
 
 En arrière-plan, le journal est dans `logs/presence.log`, et la session
@@ -113,6 +119,7 @@ précédente dans `presence.log.old`.
 |---|---|---|
 | `DISCORD_APP_ID` | — | Application Discord (obligatoire) |
 | `PRESENCE_LANG` | `en` | Langue affichée : `en` ou `fr` |
+| `RLCRAFT_IMAGE` | — | URL https d'une grande image pour une partie RLCraft et le menu qui la suit (sinon : la dimension en jeu, un bloc d'herbe au menu) |
 | `SHOW_COORDS` | `0` | `1` pour afficher les coordonnées au survol |
 | `PORT` | `19131` | Port du serveur WebSocket |
 | `ENCRYPTION` | `1` | `0` pour une connexion en clair (débogage) |
@@ -130,6 +137,13 @@ demi-cuisses comprises. Une lecture douteuse n'est jamais affichée : contour
 non reconnu, ou couleurs inattendues (menu ouvert, effet de faim qui verdit les
 cuisses). La valeur précédente est alors conservée. `npm run calibrate` laisse
 30 secondes pour revenir en jeu, HUD visible.
+
+**Dégâts.** Sans cheats, le jeu refuse de compter les monstres proches. La
+presence compte alors le rouge de tes cœurs, au-dessus de la barre d'objets, à
+l'opposé de la faim : aucune calibration de plus. Si la vie baisse sur deux
+relevés de suite (environ 3 secondes), « ⚔️ Taking damage » s'affiche pendant
+20 secondes. Un clignotement ou un fondu d'un seul relevé est ignoré. Le poison
+ou le wither colorent les cœurs : ils comptent aussi comme des dégâts.
 
 **Niveau d'XP.** Dans un monde sans cheats, la commande qui donne le niveau
 est refusée : la presence lit alors le nombre vert affiché au-dessus de la
@@ -163,6 +177,14 @@ craft, four…) affiche l'activité normale.
 `npm run calibrate-screens -- trinkets lvlup` n'apprend que les écrans nommés
 et garde les autres.
 
+**Menu principal.** `npm run calibrate-menus` apprend, depuis l'écran titre,
+les onglets Mondes, Realms et Serveurs de Jouer, les Paramètres, le Marché et
+le Vestiaire : chacun deux fois, ouvert au bip double, souris en bas de
+l'écran. Jouer se rouvre sur le dernier onglet utilisé : clique le bon. Ces
+écrans sont reconnus à leur en-tête (titre, onglet souligné), jamais à leur
+contenu : tes mondes, les serveurs en vedette ou les offres du Marché changent.
+Aucun écran reconnu : « 🏠 Main Menu ».
+
 **À recalibrer** si tu changes de résolution, d'échelle d'interface ou de
 pack de textures, ou si un écran n'est plus reconnu (par exemple l'inventaire
 avec le livre de recettes ouvert, s'il était fermé à la calibration). La
@@ -183,8 +205,9 @@ de cette liste au lancement suivant.
 ## Limites connues
 
 - **Dans un monde sans cheats**, le jeu refuse les sélecteurs avancés (`@e`,
-  `@s[lm=…]`) : **pas de monstres proches**, et le niveau d'XP n'y est connu
-  que par la lecture de l'écran, donc quand Minecraft est au premier plan.
+  `@s[lm=…]`) : **pas de monstres proches** (« ⚔️ Taking damage » les remplace),
+  et le niveau d'XP n'y est connu que par la lecture de l'écran, donc quand
+  Minecraft est au premier plan.
 - `/connect` est à retaper à chaque lancement du jeu, depuis un monde avec cheats.
   Entre l'ouverture d'un monde et le `/connect`, la presence n'affiche rien :
   sans connexion, elle sait seulement qu'un monde est ouvert (HUD visible), pas
@@ -206,7 +229,7 @@ bridge.js (WebSocket chiffré) ──events──> state.js ──> presence.js 
       ^         liste blanche                 ^               |
       └──── commandes de lecture ─────────────┤        names.js + i18n.js
                                               │        + data/rlcraft.json
-screen.js (captures) ──> hunger.js, screens.js, levelocr.js ─┘
+screen.js (captures) ──> hunger.js, hearts.js, screens.js, levelocr.js ─┘
 ```
 
 | Module | Rôle |
@@ -219,6 +242,7 @@ screen.js (captures) ──> hunger.js, screens.js, levelocr.js ─┘
 | `names.js`, `i18n.js` | Noms du jeu et de RLCraft, textes en anglais et en français. |
 | `level.js` | Niveau d'XP par dichotomie sur `@s[lm=N]` (mondes avec cheats). |
 | `levelocr.js` | Niveau d'XP lu à l'écran (mondes sans cheats). |
+| `hearts.js` | Dégâts subis, lus sur les cœurs (mondes sans cheats). |
 | `screen.js` | Captures de zones de la fenêtre Minecraft (PowerShell + GDI). |
 | `hunger.js`, `screens.js` | Lecture de la barre de faim, reconnaissance des écrans ouverts. |
 | `calibrate-hunger.js`, `calibrate-screens.js` | Calibrations correspondantes. |

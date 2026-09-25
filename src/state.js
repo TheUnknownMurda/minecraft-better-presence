@@ -2,6 +2,9 @@
 import { RLCRAFT_PASSIVE } from './names.js';
 
 const WINDOW_MS = 30_000; // fenetre d'observation pour deduire l'activite
+const IDLE_MS = 120_000; // immobile depuis plus longtemps : « Idle »
+const HURT_SHOW_MS = 20_000; // « Taking damage » affiche encore ce temps apres des degats
+const NO_TARGET = -2147352576; // testfor : aucune entite ne correspond, soit un compte de 0
 
 // Soif RLCraft (scoreboard "thirst"), calibree en jeu le 2026-09-23 contre le
 // HUD : plafond observe ~38000 (une gorgee = +6000), 10 gouttes de 3800.
@@ -34,6 +37,7 @@ export class GameState {
     this.inMenu = false; // menu principal : connexion ouverte, aucun monde charge
     this.cameFromRlcraft = false; // monde quitte pour le menu : une partie RLCraft ?
     this.screen = null; // ecran reconnu : 'pause', 'inventory', 'chest', 'trinkets' ou 'lvlup' (screens.js)
+    this.menuScreen = null; // ecran du menu principal (Jouer, Parametres...) ; null : l'ecran titre
     // Preuves de presence en jeu, independantes des commandes (voir applyPoll).
     this.lastEventAt = 0;
     this.lastHudAt = 0;
@@ -43,7 +47,8 @@ export class GameState {
     this.player = { name: null, dimension: null, pos: null, travel: null, underwater: false, lastMoveAt: Date.now() };
     this.world = { day: null, timeOfDay: null, weather: null };
     this.players = { count: null, max: null };
-    this.nearby = { monsters: 0 };
+    this.nearby = { monsters: 0, known: false };
+    this.lastHurtAt = 0; // degats lus sur les coeurs (hearts.js)
     this.counters = { blocksBroken: 0, kills: 0, deaths: 0, coins: 0 };
     this.armor = { head: null, chest: null, legs: null, feet: null };
     this.lastKill = null;
@@ -54,6 +59,11 @@ export class GameState {
     this.level = null; // niveau d'XP par commande (level.js), null sans cheats
     this.levelScreen = null; // niveau d'XP lu sur le HUD (levelocr.js)
     this.hunger = null; // 0 a 20, lue a l'ecran, voir hunger.js
+  }
+
+  /** Des degats ont ete lus sur les coeurs il y a peu. */
+  recentlyHurt(now = Date.now()) {
+    return now - this.lastHurtAt < HURT_SHOW_MS;
   }
 
   /** Niveau d'XP : la commande quand elle est disponible, sinon la lecture ecran. */
@@ -78,7 +88,8 @@ export class GameState {
     Object.assign(this.player, { dimension: null, pos: null, travel: null, underwater: false });
     this.world = { day: null, timeOfDay: null, weather: null };
     this.players = { count: null, max: null };
-    this.nearby = { monsters: 0 };
+    this.nearby = { monsters: 0, known: false };
+    this.lastHurtAt = 0; // degats lus sur les coeurs (hearts.js)
     this.armor = { head: null, chest: null, legs: null, feet: null };
     this.lastKill = null;
     this.lastDeath = null;
@@ -95,6 +106,7 @@ export class GameState {
   leaveMenu() {
     if (!this.inMenu) return false;
     this.inMenu = false;
+    this.menuScreen = null;
     this.player.lastMoveAt = Date.now(); // pas de faux "En pause" a l'arrivee
     return true;
   }
@@ -208,8 +220,13 @@ export class GameState {
     if (time.statusCode >= 0 && Number.isFinite(time.data)) this.world.timeOfDay = time.data;
     if (day.statusCode >= 0 && Number.isFinite(day.data)) this.world.day = day.data;
     if (weather.statusCode >= 0 && Number.isFinite(weather.data)) this.world.weather = weather.data;
-    // testfor echoue quand personne ne correspond : c'est un zero, pas une erreur.
+    // testfor echoue quand personne ne correspond : c'est un zero, pas une
+    // erreur. Sans cheats, il est refuse (pas d'expansion de selecteurs) : le
+    // compte est alors inconnu, et les degats lus a l'ecran le remplacent.
     this.nearby.monsters = monsters.statusCode >= 0 ? (monsters.victim ?? []).length : 0;
+    if (!monsters.timeout && !monsters.disconnected) {
+      this.nearby.known = monsters.statusCode >= 0 || monsters.statusCode === NO_TARGET;
+    }
     if (list.statusCode >= 0) {
       this.players.count = list.currentPlayerCount;
       this.players.max = list.maxPlayerCount;
@@ -265,7 +282,7 @@ export class GameState {
     const craft = this.recent.findLast((a) => ['crafting', 'smelting'].includes(a.kind) && now - a.at < 15_000);
     if (craft) return { kind: craft.kind, target: craft.target };
 
-    if (now - this.player.lastMoveAt > 60_000) return { kind: 'idle' };
+    if (now - this.player.lastMoveAt > IDLE_MS) return { kind: 'idle' };
     if (this.player.travel === 6) return { kind: 'riding' };
     if (this.player.underwater || this.player.travel === 1) return { kind: 'swimming' };
     return { kind: 'exploring' };

@@ -205,8 +205,9 @@ export function backdropMask(img) {
 
 /**
  * Signature d'un ecran. `target` : { img, stable } ; `others` : captures des
- * autres ecrans calibres ; `inGame` : capture sans menu. Toutes plein ecran et
- * de meme taille. Renvoie { patches: [{ x, y, w, h, samples }] } ou null.
+ * autres ecrans calibres ; `inGame` : capture sans menu (ou l'ecran titre,
+ * pour les ecrans du menu principal). Toutes plein ecran et de meme taille.
+ * Renvoie { patches: [{ x, y, w, h, samples }] } ou null.
  *
  * `overlay` : menu dessine par-dessus le jeu, HUD visible (menu LVL UP). Il
  * n'a ni panneau gris ni structure d'interface : on ecarte plutot le fond
@@ -214,28 +215,41 @@ export function backdropMask(img) {
  * coordonnees). On ne garde que les contours poses directement sur le fond,
  * comme un texte d'aide : le contenu des cadres du menu (niveaux, selection,
  * capacites debloquees) change en jouant, et un aplat pourrait etre du ciel.
+ *
+ * `menu` : ecran du menu principal (Jouer, Parametres, Marche...). Pas de
+ * panneau gris non plus, et un decor anime derriere. Leur identite est dans
+ * leur en-tete (titre, onglet selectionne), que `region` delimite : le contenu
+ * (mondes, dates, serveurs ou offres en vedette) change d'un jour a l'autre.
  */
-export function buildSignature(target, others, inGame, { overlay = false, region = null } = {}) {
+export function buildSignature(target, others, inGame, { overlay = false, menu = false, region = null } = {}) {
   const { img } = target;
-  const ui = overlay ? null : uiMask(img);
-  const structure = overlay ? null : structureMask(img);
+  const panels = !overlay && !menu; // ecran de jeu classique, delimite par ses panneaux gris
+  const ui = panels ? uiMask(img) : null;
+  const structure = panels ? structureMask(img) : null;
   const backdrop = overlay ? backdropMask(img) : null;
   const nearBackdrop = overlay ? dilate(backdrop, img.w, img.h, NEAR) : null;
   const outside = (x, y) => region && (x < region.x0 || x >= region.x1 || y < region.y0 || y >= region.y1);
-  const cols = Math.floor(img.w / CELL_W);
-  const rows = Math.floor(img.h / CELL_H);
+  // Menu principal : zones deux fois plus petites. Ce qui distingue ses ecrans
+  // (libelle souligne d'un onglet, titre) est etroit ; plusieurs petites zones
+  // valent mieux qu'une grande.
+  const cellW = menu ? CELL_W / 2 : CELL_W;
+  const cellH = menu ? CELL_H / 2 : CELL_H;
+  const minDetails = menu ? MIN_DETAILS / 2 : MIN_DETAILS;
+  const minCandidates = menu ? MIN_CANDIDATES / 2 : MIN_CANDIDATES;
+  const cols = Math.floor(img.w / cellW);
+  const rows = Math.floor(img.h / cellH);
   const cells = [];
 
   for (let cy = 0; cy < rows; cy++) {
     for (let cx = 0; cx < cols; cx++) {
       const candidates = [];
-      for (let dy = 0; dy < CELL_H; dy++) {
-        for (let dx = 0; dx < CELL_W; dx++) {
-          const x = cx * CELL_W + dx;
-          const y = cy * CELL_H + dy;
+      for (let dy = 0; dy < cellH; dy++) {
+        for (let dx = 0; dx < cellW; dx++) {
+          const x = cx * cellW + dx;
+          const y = cy * cellH + dy;
           const i = y * img.w + x;
           if (!target.stable[i]) continue;
-          if (overlay ? backdrop[i] || outside(x, y) : !ui[i] || !structure[i]) continue;
+          if (panels ? !ui[i] || !structure[i] : outside(x, y) || (overlay && backdrop[i])) continue;
           const p = rgbAt(img, x, y);
           if (!isGrey(p)) continue;
           if (maxDiff(p, rgbAt(inGame, x, y)) < DISTINCT) continue;
@@ -243,7 +257,7 @@ export function buildSignature(target, others, inGame, { overlay = false, region
           candidates.push([dx, dy, p]);
         }
       }
-      if (candidates.length < MIN_CANDIDATES * CELL_W * CELL_H) continue;
+      if (candidates.length < minCandidates * cellW * cellH) continue;
 
       // Contours : pixel de signature dont un voisin horizontal, stable lui aussi,
       // differe nettement. Ce voisin n'a pas a etre dans la signature : une
@@ -251,18 +265,21 @@ export function buildSignature(target, others, inGame, { overlay = false, region
       // coffre, qui en est exclu.
       const details = [];
       const plain = [];
+      // Menu principal : voisins verticaux aussi, pour le trait horizontal qui
+      // souligne l'onglet selectionne.
+      const neighbours = menu ? [[-1, 0], [1, 0], [0, -1], [0, 1]] : [[-1, 0], [1, 0]];
       for (const c of candidates) {
         const [dx, dy, p] = c;
-        const edge = [-1, 1].some((s) => {
-          const nx = cx * CELL_W + dx + s;
-          const y = cy * CELL_H + dy;
-          if (nx < 0 || nx >= img.w || !target.stable[y * img.w + nx]) return false;
-          return Math.abs(luma(p) - luma(rgbAt(img, nx, y))) >= 40;
+        const edge = neighbours.some(([sx, sy]) => {
+          const nx = cx * cellW + dx + sx;
+          const ny = cy * cellH + dy + sy;
+          if (nx < 0 || nx >= img.w || ny < 0 || ny >= img.h || !target.stable[ny * img.w + nx]) return false;
+          return Math.abs(luma(p) - luma(rgbAt(img, nx, ny))) >= 40;
         });
-        const onBackdrop = !overlay || nearBackdrop[(cy * CELL_H + dy) * img.w + cx * CELL_W + dx];
+        const onBackdrop = !overlay || nearBackdrop[(cy * cellH + dy) * img.w + cx * cellW + dx];
         (edge && onBackdrop ? details : plain).push(c);
       }
-      if (details.length < MIN_DETAILS) continue;
+      if (details.length < minDetails) continue;
       cells.push({ cx, cy, details, plain });
     }
   }
@@ -270,11 +287,13 @@ export function buildSignature(target, others, inGame, { overlay = false, region
 
   // Le plus de details d'abord ; deux zones cote a cote designeraient le meme
   // element (une infobulle les masquerait ensemble). En diagonale, c'est permis :
-  // l'inventaire et le coffre n'ont que quelques zones propres, groupees.
+  // l'inventaire et le coffre n'ont que quelques zones propres, groupees. Au
+  // menu principal, ou les zones sont petites et le libelle d'un onglet etroit,
+  // cote a cote aussi.
   cells.sort((a, b) => b.details.length - a.details.length);
   const chosen = [];
   for (const c of cells) {
-    if (chosen.some((o) => Math.abs(o.cx - c.cx) + Math.abs(o.cy - c.cy) <= 1)) continue;
+    if (!menu && chosen.some((o) => Math.abs(o.cx - c.cx) + Math.abs(o.cy - c.cy) <= 1)) continue;
     chosen.push(c);
     if (chosen.length === MAX_PATCHES) break;
   }
@@ -285,11 +304,12 @@ export function buildSignature(target, others, inGame, { overlay = false, region
   };
   return {
     ...(overlay && { overlay: true }),
+    ...(menu && { menu: true }),
     patches: chosen.map((c) => {
       const details = spread(c.details, overlay ? 2 * SAMPLES_PER_KIND : SAMPLES_PER_KIND);
       const plain = overlay ? [] : spread(c.plain, 2 * SAMPLES_PER_KIND - details.length);
       return {
-        x: c.cx * CELL_W, y: c.cy * CELL_H, w: CELL_W, h: CELL_H,
+        x: c.cx * cellW, y: c.cy * cellH, w: cellW, h: cellH,
         details: details.length,
         samples: [...details, ...plain].map(([dx, dy, p]) => [dx, dy, hex(p)]),
       };

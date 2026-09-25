@@ -138,6 +138,66 @@ et différent (écart ≥ 45) du jeu et de tous les autres écrans calibrés.
 - Validé en jeu (monde sans cheats) : Discord a affiché « 📈 In the LVL UP
   Menu » et « 💍 In the Trinket Pouch ».
 
+### Dégâts lus sur les cœurs (`src/hearts.js`, 2026-09-25)
+
+Sans cheats, `testfor @e[r=24,family=monster]` est refusé
+(`<insufficient permissions for selector expansion>`) : pas de monstres
+proches. Aucune autre source trouvée : l'event `EntitySpawned` ne se déclenche
+que pour les actions du joueur (22 fois, toujours `type: player`), et aucun tag
+ni score RLCraft n'indique un combat. À la place, la presence signale les
+dégâts subis, lus sur les cœurs.
+
+- Position : miroir de la barre de faim par rapport au centre de l'écran.
+  Capture du 2026-09-25 en 4K : 14 cœurs (10 en bas, 4 au-dessus), barre
+  d'armure grise au-dessus, cadran RLCraft rond juste à droite.
+- La texture des cœurs n'a que deux rouges, `#FF1313` (9 100 px) et
+  `#BB1313` (2 450 px), soit 825 px par cœur plein en 4K. Un premier critère
+  « rouge dominant » comptait aussi l'anneau orange du cadran (`#E5853E`,
+  483 px).
+- Pendant le fondu du HUD (jeu qui revient au premier plan), les cœurs
+  s'assombrissent (`#DE1111`, `#A41111`) : les couleurs exactes ne sont plus
+  comptées. Critère retenu : la teinte (vert = bleu, 7 à 10 % du rouge), qui
+  donne 11 550 px sur les 8 captures, fondu compris.
+- Test réel (chutes) : 14 → 13,5 → 12 cœurs en deux relevés, puis
+  régénération. La 1ʳᵉ logique attendait deux relevés égaux : en combat, où la
+  vie baisse à chaque relevé, elle n'aurait jamais rien signalé. Version
+  retenue : deux relevés de suite sous la dernière valeur stable, même
+  différents. Dégâts signalés au 2ᵉ relevé bas ; un relevé bas isolé
+  (clignotement, fondu, écran qui se ferme) est ignoré.
+
+### Écrans du menu principal (`npm run calibrate-menus`, 2026-09-25)
+
+Jouer (onglets Mondes, Realms, Serveurs), Paramètres, Marché et Vestiaire. Pas
+de panneau `#C6C6C6`, et le décor animé de l'écran titre reste visible autour.
+
+- Premiers essais : écran titre capturé alors qu'il n'y avait rien d'ouvert, et
+  Jouer rouvert sur le dernier onglet utilisé (Realms au lieu de Mondes).
+  Contrôle retenu : la barre de titre claire en haut de l'écran (part claire
+  des 5 % du haut : 0,98 sur Jouer, 0,74 sur le Marché, 0,07 sur l'écran titre).
+- Ressemblance de deux captures sur la bande centrale du haut (sans les bords,
+  où le décor bouge) : 0,996 pour le même onglet, 0,69 à 0,70 entre onglets.
+- Les trois onglets de Jouer ne diffèrent que par l'onglet sélectionné : son
+  libellé descend d'une dizaine de pixels et un trait le souligne. Ce trait
+  horizontal n'a presque pas de contours horizontaux : pour les menus, les
+  voisins verticaux comptent aussi, et les zones sont de 128 × 32 px.
+- Le compteur « Mondes (N) » change pendant le chargement de la liste (5, 6
+  puis 7 sur les captures) : il rendait « distinctif » le libellé non
+  sélectionné, et Realms passait pour Serveurs. Correctif : un pixel doit
+  différer des deux ouvertures de chaque autre écran, et la calibration laisse
+  12 s à la liste pour se charger.
+- Paramètres : sous la barre de titre, le texte dépend de la catégorie ouverte
+  (« Tout le monde a sa place… » pour Accessibilité). Hauteur retenue : 13 % de
+  l'écran pour Jouer (titre et onglets), 6 % ailleurs (barre de titre seule).
+  Le titre du Marché et du Vestiaire est collé à gauche : la bande couvre toute
+  la largeur.
+- Zones retenues : libellé et trait de l'onglet pour Jouer, « PARAMÈTRES »,
+  « Ma bibliothèque » et la recherche du Marché, « Vestiaire » et son bouton
+  « + ». Une zone de Mondes contient le compteur : elle peut manquer, les deux
+  autres suffisent.
+- Validé en direct (3 min) : chaque écran reconnu à 100/100/100 (Mondes une fois
+  à 81/100/100, le compteur), écran titre jamais reconnu, aucune signature de
+  jeu déclenchée au menu.
+
 ### Niveau d'XP lu à l'écran (`src/levelocr.js`)
 
 Sans cheats, `@s[lm=N]` est refusé. Le niveau est affiché en vert `#7FFF00`

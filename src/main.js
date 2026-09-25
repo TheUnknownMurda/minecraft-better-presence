@@ -11,11 +11,13 @@ import { findLevel } from './level.js';
 import { readHunger } from './hunger.js';
 import { recognize } from './screens.js';
 import { levelRegion, readLevelText } from './levelocr.js';
+import { DamageWatch, heartPixels, heartsRegion } from './hearts.js';
 import { ScreenReader } from './screen.js';
 
 const PORT = Number(process.env.PORT ?? 19131);
 const APP_ID = process.env.DISCORD_APP_ID;
 const SHOW_COORDS = process.env.SHOW_COORDS === '1';
+const RLCRAFT_IMAGE = process.env.RLCRAFT_IMAGE || null;
 const LANG = process.env.PRESENCE_LANG ?? 'en';
 const ENCRYPTION = process.env.ENCRYPTION !== '0';
 
@@ -145,6 +147,7 @@ const hud = loadHud();
 let screen = null;
 let screenBusy = false;
 let screenWarned = null;
+const damage = new DamageWatch();
 
 function loadHud() {
   try {
@@ -161,6 +164,8 @@ function loadHud() {
 
 const SCREEN_LOG = {
   pause: 'Menu pause', inventory: 'Inventaire', chest: 'Coffre', trinkets: 'Poche a trinkets', lvlup: 'Menu LVL UP',
+  menuWorlds: 'Jouer (mondes)', menuRealms: 'Jouer (Realms)', menuServers: 'Jouer (serveurs)',
+  menuSettings: 'Parametres', marketplace: 'Marche', dressingRoom: 'Vestiaire',
 };
 // Signatures calibrees a part, mais affichees comme un autre ecran.
 const SCREEN_AS = { largeChest: 'chest' };
@@ -171,9 +176,13 @@ function warnScreenOnce(reason) {
   log(`Ecran : ${reason}`);
 }
 
-/** Signatures des ecrans qui masquent le HUD, ou des menus dessines par-dessus (HUD visible). */
-function signaturesFor(overlay) {
-  return Object.fromEntries(Object.entries(hud.screens ?? {}).filter(([, s]) => !!s.overlay === overlay));
+/**
+ * Signatures d'un type : 'screen' (ecran de jeu qui masque le HUD), 'overlay'
+ * (menu dessine par-dessus le jeu, HUD visible) ou 'menu' (menu principal).
+ */
+function signaturesFor(kind) {
+  const kindOf = (s) => (s.menu ? 'menu' : s.overlay ? 'overlay' : 'screen');
+  return Object.fromEntries(Object.entries(hud.screens ?? {}).filter(([, s]) => kindOf(s) === kind));
 }
 
 // Sans WebSocket, seul l'ecran dit si un monde est ouvert : HUD visible, ou
@@ -210,17 +219,22 @@ async function pollScreen() {
     const img = await screen.grab(win.x + g.x, win.y + g.y - g.cell, 9 * g.period + 9 * g.cell, 11 * g.cell);
     const points = readHunger(img, { x: 0, y: g.cell, cell: g.cell, period: g.period });
     if (!bridge.connected || state.inMenu) {
+      damage.reset(); // la vie du monde suivant ne se compare pas a celle-ci
       let seen = points !== null;
-      if (!seen && !bridge.connected) seen = (await recognize(signaturesFor(false), grab)) !== null;
+      if (!seen && !bridge.connected) seen = (await recognize(signaturesFor('screen'), grab)) !== null;
       noteWorldOnScreen(seen);
       if (points !== null) state.lastHudAt = Date.now(); // faux menu : applyPoll le corrigera
+      // Menu principal : l'ecran ouvert (Jouer, Parametres...), sinon l'ecran titre.
+      const menu = seen ? null : await recognize(signaturesFor('menu'), grab);
+      if (menu !== state.menuScreen && !seen) log(menu ? `Menu principal : ${SCREEN_LOG[menu] ?? menu}` : 'Ecran titre');
+      state.menuScreen = menu;
       return;
     }
 
     // Barre de faim masquee : un ecran recouvre le HUD (pause, inventaire,
     // coffre, ou un autre non calibre). Visible : en jeu, ou dans un menu
     // dessine par-dessus le jeu (menu LVL UP).
-    let shown = await recognize(signaturesFor(points !== null), grab);
+    let shown = await recognize(signaturesFor(points !== null ? 'overlay' : 'screen'), grab);
     shown = SCREEN_AS[shown] ?? shown;
     if (state.inMenu) return; // le joueur a pu quitter le monde pendant les captures
     // HUD ou ecran de jeu visible : preuve que l'on est en jeu (voir applyPoll).
@@ -232,6 +246,13 @@ async function pollScreen() {
     state.screen = shown;
     if (points === null) return;
     state.hunger = points;
+
+    // Coeurs : une baisse de vie confirmee signale des degats (voir hearts.js).
+    const h = heartsRegion(win, g);
+    if (damage.update(heartPixels(await screen.grab(win.x + h.x, win.y + h.y, h.w, h.h)), g.cell) && !state.inMenu) {
+      if (!state.recentlyHurt()) log('Degats subis');
+      state.lastHurtAt = Date.now();
+    }
 
     // HUD visible : le niveau d'XP y est lisible. Indispensable sans cheats,
     // ou le selecteur @s[lm=N] de level.js est refuse.
@@ -297,10 +318,10 @@ setInterval(pollSlow, trace ? 2_000 : 30_000);
 // Recalcul frequent ; le sink ne pousse vers Discord que ce qui a change.
 setInterval(() => {
   if (bridge.connected) {
-    if (state.inMenu || state.player.dimension !== null) discord.set(buildActivity(state, { showCoords: SHOW_COORDS }));
+    if (state.inMenu || state.player.dimension !== null) discord.set(buildActivity(state, { showCoords: SHOW_COORDS, rlcraftImage: RLCRAFT_IMAGE }));
   } else if (gameRunning && !worldOnScreen) {
     // Jeu lance, pas (encore) de /connect : le menu principal.
-    discord.set(menuActivity(state));
+    discord.set(menuActivity(state, { rlcraftImage: RLCRAFT_IMAGE }));
   } else {
     // Jeu ferme, ou un monde a l'ecran sans /connect : rien de sur a afficher.
     discord.clear();

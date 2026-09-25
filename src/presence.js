@@ -71,23 +71,25 @@ function profile(state) {
 /**
  * Menu principal : rien du monde precedent, seulement le chronometre de
  * session, et le nom du modpack si l'on sort d'une partie RLCraft. Aussi
- * affiche au lancement du jeu, avant tout /connect.
+ * affiche au lancement du jeu, avant tout /connect. `rlcraftImage` : grande
+ * image propre a RLCraft (RLCRAFT_IMAGE dans .env), a la place du bloc d'herbe.
  */
-export function menuActivity(state) {
+export function menuActivity(state, { rlcraftImage = null } = {}) {
   const S = strings();
   const title = state.cameFromRlcraft ? S.rlcraftTitle : 'Minecraft Bedrock';
   return {
-    details: S.mainMenu,
+    // Ecran ouvert (Jouer, Parametres...) en ligne 1, sinon « Main Menu ».
+    details: S.menuScreens[state.menuScreen] ?? S.mainMenu,
     state: title,
     startTimestamp: state.sessionStart,
-    largeImageKey: IMAGES.overworld,
+    largeImageKey: (state.cameFromRlcraft && rlcraftImage) || IMAGES.overworld,
     largeImageText: title,
   };
 }
 
-export function buildActivity(state, { showCoords = false } = {}) {
+export function buildActivity(state, { showCoords = false, rlcraftImage = null } = {}) {
   const S = strings();
-  if (state.inMenu) return menuActivity(state);
+  if (state.inMenu) return menuActivity(state, { rlcraftImage });
   const dimId = S.dimensions[state.player.dimension] ? state.player.dimension : 0;
   const dim = S.dimensions[dimId];
   const a = state.activity();
@@ -108,6 +110,8 @@ export function buildActivity(state, { showCoords = false } = {}) {
     timeOfDay(state.world.timeOfDay),
     S.weather[state.world.weather],
     state.nearby.monsters > 0 && S.hostiles(state.nearby.monsters),
+    // Sans cheats, pas de compte des monstres : les degats subis a la place.
+    !state.nearby.known && state.recentlyHurt() && S.takingDamage,
   ].filter(Boolean).join(' · ');
 
   const pos = state.player.pos;
@@ -119,7 +123,8 @@ export function buildActivity(state, { showCoords = false } = {}) {
     details: fit(describe(a, dim)),
     state: fit(stateLine || 'Minecraft Bedrock'),
     startTimestamp: state.sessionStart,
-    largeImageKey: IMAGES[DIMENSION_IMAGES[dimId]],
+    // Partie RLCraft : son image plutot que la dimension, qui reste dans le texte.
+    largeImageKey: (state.rlcraft && rlcraftImage) || IMAGES[DIMENSION_IMAGES[dimId]],
     largeImageText: fit(`${where} · ${S.session(state.counters)}`),
     smallImageKey: IMAGES[a.kind] ?? IMAGES.exploring,
     smallImageText: fit(profile(state) || describe(a, dim)),
